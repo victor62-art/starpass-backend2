@@ -83,6 +83,7 @@ model Tier {
   onChainId    Int      @map("on_chain_id")
   creatorId    String   @map("creator_id")
   name         String
+  description  String?
   priceUsdc    Decimal  @map("price_usdc")
   durationDays Int      @map("duration_days")
   maxSupply    Int      @default(0) @map("max_supply")
