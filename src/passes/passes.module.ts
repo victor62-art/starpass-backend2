@@ -3,9 +3,10 @@ import { PassesController } from './passes.controller';
 import { PassesService } from './passes.service';
 import { AuthModule } from '../auth/auth.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [AuthModule, WebhooksModule],
+  imports: [AuthModule, WebhooksModule, NotificationsModule],
   controllers: [PassesController],
   providers: [PassesService],
   exports: [PassesService],

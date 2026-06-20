@@ -39,6 +39,7 @@ model Creator {
   id             String   @id @default(uuid())
   userId         String   @unique @map("user_id")
   stellarAddress String   @unique @map("stellar_address")
+  email          String?  @unique
   displayName    String   @map("display_name")
   bio            String?
   avatarUrl      String?  @map("avatar_url")

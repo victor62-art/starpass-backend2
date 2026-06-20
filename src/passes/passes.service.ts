@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class PassesService {
@@ -9,6 +10,7 @@ export class PassesService {
   constructor(
     private prisma: PrismaService,
     private webhooksService: WebhooksService,
+    private emailService: EmailService,
   ) {}
 
   /**
@@ -192,6 +194,18 @@ export class PassesService {
       this.webhooksService.deliverPassPurchaseWebhook(creator.id, pass).catch((err) => {
         this.logger.error(`Error triggering webhook: ${err.message}`);
       });
+
+      // Send email notification to creator
+      if (creator.email) {
+        this.emailService.sendPassPurchaseEmail(
+          creator.email,
+          data.fanAddress,
+          tier.name,
+          tier.priceUsdc.toString()
+        ).catch((err) => {
+          this.logger.error(`Error triggering email: ${err.message}`);
+        });
+      }
     }
 
     return pass;

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PassesService } from './passes.service';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { EmailService } from '../notifications/email.service';
 
 describe('PassesService', () => {
   let service: PassesService;
@@ -31,6 +32,10 @@ describe('PassesService', () => {
     deliverPassPurchaseWebhook: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockEmailService = {
+    sendPassPurchaseEmail: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -42,6 +47,10 @@ describe('PassesService', () => {
         {
           provide: WebhooksService,
           useValue: mockWebhooksService,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
       ],
     }).compile();
