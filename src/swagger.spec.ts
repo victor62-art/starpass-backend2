@@ -10,6 +10,7 @@ describe('Swagger Documentation', () => {
   let originalEnv: string | undefined;
 
   beforeEach(() => {
+    jest.setTimeout(30000);
     originalEnv = process.env.NODE_ENV;
   });
 

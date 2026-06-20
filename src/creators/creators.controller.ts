@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CreatorsService } from './creators.service';
 import { CreateCreatorDto } from './dto/create-creator.dto';
@@ -19,6 +19,9 @@ export class CreatorsController {
   @ApiOperation({ summary: 'List all creators' })
   @ApiResponse({ status: 200, description: 'Return paginated list of creators' })
   findAll(@Query('page') page = 1, @Query('limit') limit = 20) {
+    if (+limit > 50) {
+      throw new BadRequestException('Limit cannot exceed 50');
+    }
     return this.creatorsService.findAll(+page, +limit);
   }
 
