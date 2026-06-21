@@ -122,3 +122,27 @@ model IndexerCheckpoint {
   updatedAt  DateTime @updatedAt @map("updated_at")
   @@map("indexer_checkpoints")
 }
+
+enum ReportTargetType {
+  CREATOR
+  TIER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id          String           @id @default(uuid())
+  reporterId  String           @map("reporter_id")
+  targetType  ReportTargetType @map("target_type")
+  targetId    String           @map("target_id")
+  reason      String
+  status      ReportStatus     @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  reporter    User             @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  @@map("reports")
+}
