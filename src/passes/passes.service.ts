@@ -128,9 +128,15 @@ export class PassesService {
   }
 
   /**
-   * Get a purchase receipt for a specific pass.
+   * Get a receipt for a pass purchase.
+   *
+   * @param passId The pass record id.
+   * @param ownerAddress The authenticated fan's Stellar public key.
+   * @returns A receipt containing pass, tier, creator, purchase, amount, and transaction details.
+   * @throws {NotFoundException} If the pass is not found.
+   * @throws {ForbiddenException} If the authenticated fan does not own the pass.
    */
-  async getReceipt(passId: string, fanAddress: string) {
+  async getReceipt(passId: string, ownerAddress: string) {
     const pass = await this.prisma.pass.findUnique({
       where: { id: passId },
       include: {
@@ -144,28 +150,21 @@ export class PassesService {
       throw new NotFoundException('Pass not found');
     }
 
-    if (pass.fan.stellarAddress !== fanAddress) {
+    if (pass.fan.stellarAddress !== ownerAddress) {
       throw new ForbiddenException('Only the pass owner can view this receipt');
     }
 
     return {
       pass: {
         id: pass.id,
-        onChainId: pass.onChainId,
-        tierId: pass.tierId,
-        creatorId: pass.creatorId,
-        fanId: pass.fanId,
-        purchasedAt: pass.purchasedAt,
-        expiresAt: pass.expiresAt,
-        txHash: pass.txHash ?? null,
+        onChainId: pass.onChainId.toString(),
         active: pass.active,
-        syncedAt: pass.syncedAt,
-        createdAt: pass.createdAt,
+        expiresAt: pass.expiresAt,
       },
       tier: pass.tier,
       creator: pass.creator,
       purchasedAt: pass.purchasedAt,
-      amount: pass.tier.priceUsdc,
+      amount: pass.tier.priceUsdc.toString(),
       txHash: pass.txHash ?? null,
     };
   }

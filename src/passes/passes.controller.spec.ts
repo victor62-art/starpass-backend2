@@ -68,15 +68,8 @@ describe('PassesController', () => {
   });
 
   describe('getReceipt', () => {
-    it('should call PassesService.getReceipt with pass id and authenticated address', async () => {
-      const receipt = {
-        pass: { id: 'pass-uuid' },
-        tier: { id: 'tier-uuid' },
-        creator: { id: 'creator-uuid' },
-        purchasedAt: new Date('2026-01-01T00:00:00Z'),
-        amount: '10.00',
-        txHash: 'tx-hash',
-      };
+    it('should call PassesService.getReceipt with the pass id and authenticated address', async () => {
+      const receipt = { pass: { id: 'pass-uuid' }, txHash: 'hash' };
       mockPassesService.getReceipt.mockResolvedValue(receipt);
 
       const result = await controller.getReceipt('pass-uuid', {

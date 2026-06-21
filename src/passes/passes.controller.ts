@@ -56,8 +56,8 @@ export class PassesController {
   @Get(':id/receipt')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get purchase receipt for a pass' })
-  @ApiResponse({ status: 200, description: 'Return purchase receipt details' })
+  @ApiOperation({ summary: 'Get a receipt for a pass purchase' })
+  @ApiResponse({ status: 200, description: 'Return pass purchase receipt details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Only the pass owner can view this receipt' })
   @ApiResponse({ status: 404, description: 'Pass not found' })
@@ -73,4 +73,3 @@ export class PassesController {
     return this.passesService.findAll(query);
   }
 }
-

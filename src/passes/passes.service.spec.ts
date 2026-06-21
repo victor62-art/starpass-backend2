@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PassesService } from './passes.service';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
@@ -126,35 +127,33 @@ describe('PassesService', () => {
   });
 
   describe('getReceipt', () => {
-    const purchasedAt = new Date('2026-01-01T00:00:00Z');
-    const mockReceiptPass = {
+    const purchasedAt = new Date('2026-06-21T12:00:00.000Z');
+    const expiresAt = new Date('2026-07-21T12:00:00.000Z');
+    const mockPassReceipt = {
       id: 'pass-uuid',
-      onChainId: BigInt(1),
-      tierId: 'tier-uuid',
-      creatorId: 'creator-uuid',
-      fanId: 'fan-uuid',
-      purchasedAt,
-      expiresAt: new Date('2026-02-01T00:00:00Z'),
+      onChainId: BigInt(42),
       active: true,
-      syncedAt: new Date('2026-01-01T00:00:00Z'),
-      createdAt: new Date('2026-01-01T00:00:00Z'),
-      txHash: 'tx-hash',
-      tier: {
-        id: 'tier-uuid',
-        priceUsdc: '10.00',
-      },
-      creator: {
-        id: 'creator-uuid',
-        stellarAddress: 'GB_CREATOR',
-      },
+      purchasedAt,
+      expiresAt,
+      txHash: 'stellar-tx-hash',
       fan: {
         id: 'fan-uuid',
         stellarAddress: 'GB_FAN',
       },
+      tier: {
+        id: 'tier-uuid',
+        name: 'Gold',
+        priceUsdc: { toString: () => '12.50' },
+      },
+      creator: {
+        id: 'creator-uuid',
+        stellarAddress: 'GB_CREATOR',
+        displayName: 'Creator',
+      },
     };
 
-    it('should return receipt details for the pass owner', async () => {
-      mockPrismaService.pass.findUnique.mockResolvedValue(mockReceiptPass);
+    it('should return purchase receipt details for the pass owner', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(mockPassReceipt);
 
       const result = await service.getReceipt('pass-uuid', 'GB_FAN');
 
@@ -169,37 +168,30 @@ describe('PassesService', () => {
       expect(result).toEqual({
         pass: {
           id: 'pass-uuid',
-          onChainId: BigInt(1),
-          tierId: 'tier-uuid',
-          creatorId: 'creator-uuid',
-          fanId: 'fan-uuid',
-          purchasedAt,
-          expiresAt: new Date('2026-02-01T00:00:00Z'),
+          onChainId: '42',
           active: true,
-          syncedAt: new Date('2026-01-01T00:00:00Z'),
-          createdAt: new Date('2026-01-01T00:00:00Z'),
-          txHash: 'tx-hash',
+          expiresAt,
         },
-        tier: mockReceiptPass.tier,
-        creator: mockReceiptPass.creator,
+        tier: mockPassReceipt.tier,
+        creator: mockPassReceipt.creator,
         purchasedAt,
-        amount: '10.00',
-        txHash: 'tx-hash',
+        amount: '12.50',
+        txHash: 'stellar-tx-hash',
       });
     });
 
-    it('should throw ForbiddenException when another fan requests the receipt', async () => {
-      mockPrismaService.pass.findUnique.mockResolvedValue(mockReceiptPass);
+    it('should reject receipt access for a different fan', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(mockPassReceipt);
 
-      await expect(service.getReceipt('pass-uuid', 'GB_OTHER')).rejects.toThrow(
+      await expect(service.getReceipt('pass-uuid', 'GB_OTHER')).rejects.toBeInstanceOf(
         ForbiddenException,
       );
     });
 
-    it('should throw NotFoundException when the pass does not exist', async () => {
+    it('should throw when the pass is not found', async () => {
       mockPrismaService.pass.findUnique.mockResolvedValue(null);
 
-      await expect(service.getReceipt('missing-pass', 'GB_FAN')).rejects.toThrow(
+      await expect(service.getReceipt('missing-pass', 'GB_FAN')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
