@@ -4,7 +4,6 @@ import { PassesService } from './passes.service';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { EmailService } from '../notifications/email.service';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('PassesService', () => {
   let service: PassesService;
@@ -194,6 +193,93 @@ describe('PassesService', () => {
       await expect(service.getReceipt('missing-pass', 'GB_FAN')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe('findAll', () => {
+    const mockPasses = [
+      {
+        id: 'pass-uuid',
+        tierId: '550e8400-e29b-41d4-a716-446655440000',
+        active: true,
+      },
+    ];
+
+    beforeEach(() => {
+      mockPrismaService.pass.findMany.mockResolvedValue(mockPasses);
+      mockPrismaService.pass.count.mockResolvedValue(mockPasses.length);
+    });
+
+    it('should filter passes by fan, tier, active, and unexpired status with pagination', async () => {
+      const result = await service.findAll({
+        fan: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        tier_id: '550e8400-e29b-41d4-a716-446655440000',
+        active: true,
+        expired: false,
+        page: 2,
+        limit: 10,
+      });
+
+      expect(prisma.pass.findMany).toHaveBeenCalledWith({
+        where: {
+          fan: {
+            stellarAddress: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          },
+          tierId: '550e8400-e29b-41d4-a716-446655440000',
+          active: true,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        skip: 10,
+        take: 10,
+        include: {
+          tier: true,
+          creator: true,
+          fan: true,
+        },
+        orderBy: {
+          purchasedAt: 'desc',
+        },
+      });
+      expect(prisma.pass.count).toHaveBeenCalledWith({
+        where: {
+          fan: {
+            stellarAddress: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          },
+          tierId: '550e8400-e29b-41d4-a716-446655440000',
+          active: true,
+          expiresAt: { gt: expect.any(Date) },
+        },
+      });
+      expect(result).toEqual({
+        data: mockPasses,
+        total: 1,
+        page: 2,
+        limit: 10,
+      });
+    });
+
+    it('should filter expired inactive passes', async () => {
+      await service.findAll({
+        active: false,
+        expired: true,
+      });
+
+      expect(prisma.pass.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            active: false,
+            expiresAt: { lte: expect.any(Date) },
+          },
+          skip: 0,
+          take: 20,
+        }),
+      );
+      expect(prisma.pass.count).toHaveBeenCalledWith({
+        where: {
+          active: false,
+          expiresAt: { lte: expect.any(Date) },
+        },
+      });
     });
   });
 });

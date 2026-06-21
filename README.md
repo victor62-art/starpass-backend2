@@ -27,6 +27,7 @@ StarPass Backend provides:
 | `GET` | `/tiers/creator/:address` | Get all tiers for a creator |
 | `GET` | `/passes/check/:fanAddress/tier/:tierId` | Check if fan has valid pass for tier |
 | `GET` | `/passes/check/:fanAddress/creator/:creatorAddress` | Check if fan has any valid pass from creator |
+| `GET` | `/passes` | List passes with filtering and pagination |
 | `GET` | `/passes/fan/:address` | Get all passes for a fan |
 | `GET` | `/fans/:address` | Get fan profile |
 | `GET` | `/fans/:address/subscriptions` | Get fan's active subscriptions |

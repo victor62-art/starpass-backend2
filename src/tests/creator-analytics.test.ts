@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { CreatorsModule } from '../creators/creators.module';
-import { CreatorsService } from '../creators/creators.service';
 import { PrismaService } from '../common/prisma.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 

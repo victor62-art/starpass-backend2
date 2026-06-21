@@ -116,6 +116,27 @@ Get a specific tier by on-chain ID.
 
 ## Pass Endpoints
 
+### GET /passes
+List passes with optional filtering and pagination.
+
+**Query params:**
+- `fan` Stellar public key
+- `tier_id` UUID
+- `active` boolean
+- `expired` boolean
+- `page` default `1`
+- `limit` default `20`, maximum `50`
+
+**Response:**
+```json
+{
+  "data": [],
+  "total": 0,
+  "page": 1,
+  "limit": 20
+}
+```
+
 ### GET /passes/check/:fanAddress/tier/:tierId
 Check if a fan has a valid pass for a specific tier.
 
