@@ -7,6 +7,10 @@ export class TiersService {
 
   /**
    * Get all active tiers for a creator
+   * 
+   * @param stellarAddress The Stellar public key of the creator.
+   * @returns A list of active tiers for the given creator.
+   * @throws {NotFoundException} If the creator is not found.
    */
   async findByCreator(stellarAddress: string) {
     const creator = await this.prisma.creator.findUnique({
@@ -25,6 +29,11 @@ export class TiersService {
 
   /**
    * Get a single tier by on-chain ID and creator address
+   * 
+   * @param stellarAddress The Stellar public key of the creator.
+   * @param onChainId The on-chain ID of the tier.
+   * @returns The tier record.
+   * @throws {NotFoundException} If either the creator or the tier is not found.
    */
   async findOne(stellarAddress: string, onChainId: number) {
     const creator = await this.prisma.creator.findUnique({
@@ -48,6 +57,9 @@ export class TiersService {
 
   /**
    * Upsert a tier from on-chain event data (called by indexer)
+   * 
+   * @param data The event data containing tier details from the blockchain.
+   * @returns The upserted tier record, or null if the creator is not found.
    */
   async upsertFromChain(data: {
     onChainId: number;

@@ -13,6 +13,12 @@ export class AuthService {
   /**
    * Verify a Stellar signature and issue a JWT.
    * The client signs a challenge message with their Stellar keypair.
+   * 
+   * @param stellarAddress The Stellar public key of the user.
+   * @param signature The base64 encoded signature.
+   * @param message The original challenge message that was signed.
+   * @returns An object containing the JWT token and the user record.
+   * @throws {UnauthorizedException} If the signature is invalid.
    */
   async login(stellarAddress: string, signature: string, message: string) {
     // Verify the signature against the Stellar address
@@ -39,6 +45,9 @@ export class AuthService {
 
   /**
    * Generate a challenge message for the client to sign
+   * 
+   * @param stellarAddress The Stellar public key of the user.
+   * @returns A challenge message string containing the address and timestamp.
    */
   getChallenge(stellarAddress: string): string {
     const timestamp = Date.now();
@@ -65,6 +74,10 @@ export class AuthService {
 
   /**
    * Validate a JWT and return the user
+   * 
+   * @param token The JWT token to validate.
+   * @returns The user record associated with the token.
+   * @throws {UnauthorizedException} If the token is invalid or expired.
    */
   async validateToken(token: string) {
     try {

@@ -39,6 +39,7 @@ model Creator {
   id             String   @id @default(uuid())
   userId         String   @unique @map("user_id")
   stellarAddress String   @unique @map("stellar_address")
+  email          String?  @unique
   displayName    String   @map("display_name")
   bio            String?
   avatarUrl      String?  @map("avatar_url")
@@ -49,7 +50,20 @@ model Creator {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tiers          Tier[]
   passes         Pass[]
+  webhooks       WebhookConfig[]
   @@map("creators")
+}
+
+model WebhookConfig {
+  id        String   @id @default(uuid())
+  creatorId String   @map("creator_id")
+  url       String
+  secret    String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  @@map("webhook_configs")
 }
 
 model Fan {
@@ -69,6 +83,7 @@ model Tier {
   onChainId    Int      @map("on_chain_id")
   creatorId    String   @map("creator_id")
   name         String
+  description  String?
   priceUsdc    Decimal  @map("price_usdc")
   durationDays Int      @map("duration_days")
   maxSupply    Int      @default(0) @map("max_supply")
@@ -91,6 +106,7 @@ model Pass {
   fanId       String   @map("fan_id")
   purchasedAt DateTime @map("purchased_at")
   expiresAt   DateTime @map("expires_at")
+  txHash      String?  @map("tx_hash")
   active      Boolean  @default(true)
   syncedAt    DateTime @map("synced_at")
   createdAt   DateTime @default(now()) @map("created_at")
