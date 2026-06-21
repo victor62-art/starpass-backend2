@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { PassesService } from './passes.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -53,6 +53,18 @@ export class PassesController {
     return this.passesService.getCreatorPassCount(address);
   }
 
+  @Get(':id/receipt')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a receipt for a pass purchase' })
+  @ApiResponse({ status: 200, description: 'Return pass purchase receipt details' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Only the pass owner can view this receipt' })
+  @ApiResponse({ status: 404, description: 'Pass not found' })
+  getReceipt(@Param('id') id: string, @Request() req: any) {
+    return this.passesService.getReceipt(id, req.user.address);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List all passes with filters and pagination' })
   @ApiResponse({ status: 200, description: 'Return paginated list of passes' })
@@ -61,4 +73,3 @@ export class PassesController {
     return this.passesService.findAll(query);
   }
 }
-
