@@ -1,15 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { validate } from 'class-validator';
 import { CreatorsService } from './creators.service';
 import { PrismaService } from '../common/prisma.service';
+import { UpdateCreatorDto } from './dto/update-creator.dto';
 
 describe('CreatorsService', () => {
   let service: CreatorsService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     creator: {
       findUnique: jest.fn(),
+      update: jest.fn(),
     },
     pass: {
       findMany: jest.fn(),
@@ -25,8 +27,54 @@ describe('CreatorsService', () => {
     }).compile();
 
     service = module.get<CreatorsService>(CreatorsService);
-    prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
+  });
+
+  describe('update', () => {
+    it('should save creator social links', async () => {
+      const creator = { id: 'creator-1', stellarAddress: 'GB_CREATOR' };
+      const dto = {
+        twitterUrl: 'https://x.com/starpass',
+        instagramUrl: 'https://instagram.com/starpass',
+        websiteUrl: 'https://starpass.example',
+      };
+      const updatedCreator = { ...creator, ...dto };
+
+      mockPrismaService.creator.findUnique.mockResolvedValue(creator);
+      mockPrismaService.creator.update.mockResolvedValue(updatedCreator);
+
+      await expect(service.update('GB_CREATOR', dto)).resolves.toEqual(updatedCreator);
+
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({
+        where: { stellarAddress: 'GB_CREATOR' },
+      });
+      expect(mockPrismaService.creator.update).toHaveBeenCalledWith({
+        where: { id: creator.id },
+        data: dto,
+      });
+    });
+
+    it('should reject invalid social link URLs in the update DTO', async () => {
+      const dto = new UpdateCreatorDto();
+      dto.twitterUrl = 'not-a-url';
+      dto.instagramUrl = 'https://';
+      dto.websiteUrl = 'also-invalid';
+
+      const errors = await validate(dto);
+
+      expect(errors.map((error) => error.property)).toEqual(
+        expect.arrayContaining(['twitterUrl', 'instagramUrl', 'websiteUrl']),
+      );
+    });
+
+    it('should accept valid social link URLs in the update DTO', async () => {
+      const dto = new UpdateCreatorDto();
+      dto.twitterUrl = 'https://x.com/starpass';
+      dto.instagramUrl = 'https://instagram.com/starpass';
+      dto.websiteUrl = 'https://starpass.example';
+
+      await expect(validate(dto)).resolves.toHaveLength(0);
+    });
   });
 
   describe('getRevenue', () => {
@@ -72,8 +120,8 @@ describe('CreatorsService', () => {
         ],
       });
 
-      expect(prisma.creator.findUnique).toHaveBeenCalledWith({ where: { userId: 'user-123' } });
-      expect(prisma.pass.findMany).toHaveBeenCalledWith({
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({ where: { userId: 'user-123' } });
+      expect(mockPrismaService.pass.findMany).toHaveBeenCalledWith({
         where: { creatorId: creator.id },
         include: { tier: true },
       });
