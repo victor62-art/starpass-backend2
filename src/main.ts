@@ -2,6 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { validateConfig } from './common/config.validation';
+
+// Fail fast if required environment variables are missing
+validateConfig();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
