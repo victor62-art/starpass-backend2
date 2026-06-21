@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
@@ -77,11 +77,7 @@ describe('CreatorsController', () => {
 
       await controller.registerWebhook(creatorId, dto);
 
-      expect(webhooksService.register).toHaveBeenCalledWith(
-        creatorId,
-        dto.url,
-        dto.secret
-      );
+      expect(webhooksService.register).toHaveBeenCalledWith(creatorId, dto.url, dto.secret);
     });
   });
 
@@ -92,9 +88,7 @@ describe('CreatorsController', () => {
         totalRevenue: 15450.0,
         totalPasses: 342,
         pendingBalance: 1200.5,
-        topTiers: [
-          { id: 'tier-123', name: 'VIP Access', revenue: 8500.0 },
-        ],
+        topTiers: [{ id: 'tier-123', name: 'VIP Access', revenue: 8500.0 }],
       };
       mockCreatorsService.getRevenue.mockResolvedValue(result);
 
@@ -104,10 +98,10 @@ describe('CreatorsController', () => {
       expect(creatorsService.getRevenue).toHaveBeenCalledWith(creatorId);
     });
 
-    it('should throw ForbiddenException when authenticated user does not match path id', async () => {
-      await expect(
-        controller.getRevenue('user-123', { user: { sub: 'user-456' } }),
-      ).rejects.toThrowError('You are not authorized to access this creator revenue summary');
+    it('should throw ForbiddenException when authenticated user does not match path id', () => {
+      expect(() => controller.getRevenue('user-123', { user: { sub: 'user-456' } })).toThrow(
+        ForbiddenException,
+      );
     });
   });
 
