@@ -14,6 +14,8 @@ describe('CreatorsController', () => {
   const mockCreatorsService = {
     findAll: jest.fn(),
     getRevenue: jest.fn(),
+    blockFan: jest.fn(),
+    unblockFan: jest.fn(),
   };
   const mockWebhooksService = {
     register: jest.fn(),
@@ -105,9 +107,36 @@ describe('CreatorsController', () => {
     });
 
     it('should throw ForbiddenException when authenticated user does not match path id', async () => {
-      await expect(
-        controller.getRevenue('user-123', { user: { sub: 'user-456' } }),
-      ).rejects.toThrowError('You are not authorized to access this creator revenue summary');
+      expect(() => controller.getRevenue('user-123', { user: { sub: 'user-456' } })).toThrowError(
+        'You are not authorized to access this creator revenue summary',
+      );
+    });
+  });
+
+  describe('blockFan', () => {
+    it('should call CreatorsService.blockFan', async () => {
+      const creatorId = 'creator-123';
+      const dto = {
+        fanAddress: 'GB_FAN',
+        reason: 'spam',
+      };
+      const block = { id: 'block-123', creatorId, ...dto };
+      mockCreatorsService.blockFan.mockResolvedValue(block);
+
+      const result = await controller.blockFan(creatorId, dto);
+
+      expect(creatorsService.blockFan).toHaveBeenCalledWith(creatorId, dto);
+      expect(result).toEqual(block);
+    });
+  });
+
+  describe('unblockFan', () => {
+    it('should call CreatorsService.unblockFan', async () => {
+      const result = { creatorId: 'creator-123', fanAddress: 'GB_FAN', blocked: false };
+      mockCreatorsService.unblockFan.mockResolvedValue(result);
+
+      await expect(controller.unblockFan('creator-123', 'GB_FAN')).resolves.toEqual(result);
+      expect(creatorsService.unblockFan).toHaveBeenCalledWith('creator-123', 'GB_FAN');
     });
   });
 

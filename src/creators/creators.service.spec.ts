@@ -14,6 +14,10 @@ describe('CreatorsService', () => {
     pass: {
       findMany: jest.fn(),
     },
+    block: {
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -92,6 +96,86 @@ describe('CreatorsService', () => {
         pendingBalance: 0,
         topTiers: [],
       });
+    });
+  });
+
+  describe('blockFan', () => {
+    it('should block a fan for a creator', async () => {
+      const creator = { id: 'creator-uuid' };
+      const block = {
+        id: 'block-uuid',
+        creatorId: creator.id,
+        fanAddress: 'GB_FAN',
+        reason: 'spam',
+      };
+      mockPrismaService.creator.findUnique.mockResolvedValue(creator);
+      mockPrismaService.block.upsert.mockResolvedValue(block);
+
+      const result = await service.blockFan(creator.id, {
+        fanAddress: 'GB_FAN',
+        reason: 'spam',
+      });
+
+      expect(prisma.creator.findUnique).toHaveBeenCalledWith({
+        where: { id: creator.id },
+      });
+      expect(prisma.block.upsert).toHaveBeenCalledWith({
+        where: {
+          creatorId_fanAddress: {
+            creatorId: creator.id,
+            fanAddress: 'GB_FAN',
+          },
+        },
+        update: {
+          reason: 'spam',
+        },
+        create: {
+          creatorId: creator.id,
+          fanAddress: 'GB_FAN',
+          reason: 'spam',
+        },
+      });
+      expect(result).toEqual(block);
+    });
+
+    it('should throw when blocking for a missing creator', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.blockFan('missing-creator', { fanAddress: 'GB_FAN' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.block.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unblockFan', () => {
+    it('should unblock a fan for a creator', async () => {
+      const creator = { id: 'creator-uuid' };
+      mockPrismaService.creator.findUnique.mockResolvedValue(creator);
+      mockPrismaService.block.deleteMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.unblockFan(creator.id, 'GB_FAN');
+
+      expect(prisma.block.deleteMany).toHaveBeenCalledWith({
+        where: {
+          creatorId: creator.id,
+          fanAddress: 'GB_FAN',
+        },
+      });
+      expect(result).toEqual({
+        creatorId: creator.id,
+        fanAddress: 'GB_FAN',
+        blocked: false,
+      });
+    });
+
+    it('should throw when unblocking for a missing creator', async () => {
+      mockPrismaService.creator.findUnique.mockResolvedValue(null);
+
+      await expect(service.unblockFan('missing-creator', 'GB_FAN')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.block.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -50,8 +50,20 @@ model Creator {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tiers          Tier[]
   passes         Pass[]
+  blocks         Block[]
   webhooks       WebhookConfig[]
   @@map("creators")
+}
+
+model Block {
+  id         String   @id @default(uuid())
+  creatorId  String   @map("creator_id")
+  fanAddress String   @map("fan_address")
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  creator    Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  @@unique([creatorId, fanAddress])
+  @@map("blocks")
 }
 
 model WebhookConfig {

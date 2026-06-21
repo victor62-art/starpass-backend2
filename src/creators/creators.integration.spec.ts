@@ -4,6 +4,7 @@ import * as request from 'supertest';
 import { CreatorsModule } from './creators.module';
 import { CreatorsService } from './creators.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PrismaService } from '../common/prisma.service';
 
 describe('Creators GET /creators/:id/revenue Integration', () => {
   let app: INestApplication;
@@ -21,6 +22,10 @@ describe('Creators GET /creators/:id/revenue Integration', () => {
 
   const mockCreatorsService = {
     getRevenue: jest.fn().mockResolvedValue(mockRevenueResult),
+  };
+  const mockPrismaService = {
+    onModuleInit: jest.fn(),
+    onModuleDestroy: jest.fn(),
   };
 
   const successJwtGuard = {
@@ -45,7 +50,9 @@ describe('Creators GET /creators/:id/revenue Integration', () => {
     })
       .overrideProvider(CreatorsService)
       .useValue(mockCreatorsService)
-      .overrideProvider(JwtAuthGuard)
+      .overrideProvider(PrismaService)
+      .useValue(mockPrismaService)
+      .overrideGuard(JwtAuthGuard)
       .useValue(successJwtGuard)
       .compile();
 
@@ -77,7 +84,9 @@ describe('Creators GET /creators/:id/revenue Integration', () => {
     })
       .overrideProvider(CreatorsService)
       .useValue(mockCreatorsService)
-      .overrideProvider(JwtAuthGuard)
+      .overrideProvider(PrismaService)
+      .useValue(mockPrismaService)
+      .overrideGuard(JwtAuthGuard)
       .useValue(mismatchJwtGuard)
       .compile();
 
