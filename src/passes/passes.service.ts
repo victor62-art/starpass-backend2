@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ListPassesDto } from './dto/list-passes.dto';
@@ -125,6 +125,48 @@ export class PassesService {
     ]);
 
     return { total, active };
+  }
+
+  /**
+   * Get a receipt for a pass purchase.
+   *
+   * @param passId The pass record id.
+   * @param ownerAddress The authenticated fan's Stellar public key.
+   * @returns A receipt containing pass, tier, creator, purchase, amount, and transaction details.
+   * @throws {NotFoundException} If the pass is not found.
+   * @throws {ForbiddenException} If the authenticated fan does not own the pass.
+   */
+  async getReceipt(passId: string, ownerAddress: string) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: {
+        tier: true,
+        creator: true,
+        fan: true,
+      },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    if (pass.fan.stellarAddress !== ownerAddress) {
+      throw new ForbiddenException('Only the pass owner can view this receipt');
+    }
+
+    return {
+      pass: {
+        id: pass.id,
+        onChainId: pass.onChainId.toString(),
+        active: pass.active,
+        expiresAt: pass.expiresAt,
+      },
+      tier: pass.tier,
+      creator: pass.creator,
+      purchasedAt: pass.purchasedAt,
+      amount: pass.tier.priceUsdc.toString(),
+      txHash: pass.txHash ?? null,
+    };
   }
 
   /**
