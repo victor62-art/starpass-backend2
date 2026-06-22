@@ -141,6 +141,11 @@ describe('Creators GET /creators/:id/revenue Integration', () => {
     onModuleDestroy: jest.fn(),
   };
 
+  const mockPrismaService = {
+    onModuleInit: jest.fn(),
+    onModuleDestroy: jest.fn(),
+  };
+
   const successJwtGuard = {
     canActivate: (context: any) => {
       const req = context.switchToHttp().getRequest();
