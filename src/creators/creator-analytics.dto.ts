@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class SubscriberGrowthPointDto {
+class SubscriberGrowthPointDto {
   @ApiProperty({ example: '2026-06-01' })
   date: string;
 
