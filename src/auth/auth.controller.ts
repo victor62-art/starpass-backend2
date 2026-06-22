@@ -3,9 +3,18 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { IsString, IsNotEmpty } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+class RefreshDto {
+  @ApiProperty({ description: 'Refresh token issued at login' })
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
+}
 
 @ApiTags('auth')
-@Controller('auth')
+@Controller({ path: 'auth', version: '1' })
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -21,10 +30,25 @@ export class AuthController {
   @Post('login')
   @Throttle({ 'auth-login': { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Login with a signed Stellar challenge' })
-  @ApiResponse({ status: 201, description: 'Login successful, returns JWT access token' })
+  @ApiResponse({ status: 201, description: 'Login successful — returns access token and refresh token' })
   @ApiResponse({ status: 401, description: 'Invalid signature or challenge' })
   @ApiResponse({ status: 429, description: 'Too many requests, rate limit exceeded' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.stellarAddress, dto.signature, dto.message);
+  }
+
+  @Post('refresh')
+  @ApiOperation({ summary: 'Issue a new access token using a refresh token' })
+  @ApiResponse({ status: 201, description: 'New access token issued' })
+  @ApiResponse({ status: 401, description: 'Refresh token expired or invalid' })
+  refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @ApiOperation({ summary: 'Revoke a refresh token' })
+  @ApiResponse({ status: 201, description: 'Logged out successfully' })
+  logout(@Body() dto: RefreshDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 }

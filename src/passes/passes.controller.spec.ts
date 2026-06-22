@@ -19,6 +19,7 @@ describe('PassesController', () => {
     hasAnyValidPass: jest.fn(),
     findByFan: jest.fn(),
     getCreatorPassCount: jest.fn(),
+    getReceipt: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -46,8 +47,8 @@ describe('PassesController', () => {
   describe('findAll', () => {
     it('should call PassesService.findAll with queries', async () => {
       const dto: ListPassesDto = {
-        fan: 'GABC...',
-        tier_id: 'tier-uuid',
+        fan: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        tier_id: '550e8400-e29b-41d4-a716-446655440000',
         active: true,
         expired: false,
         page: 2,
@@ -63,6 +64,20 @@ describe('PassesController', () => {
         page: 2,
         limit: 10,
       });
+    });
+  });
+
+  describe('getReceipt', () => {
+    it('should call PassesService.getReceipt with the pass id and authenticated address', async () => {
+      const receipt = { pass: { id: 'pass-uuid' }, txHash: 'hash' };
+      mockPassesService.getReceipt.mockResolvedValue(receipt);
+
+      const result = await controller.getReceipt('pass-uuid', {
+        user: { address: 'GB_FAN' },
+      });
+
+      expect(service.getReceipt).toHaveBeenCalledWith('pass-uuid', 'GB_FAN');
+      expect(result).toEqual(receipt);
     });
   });
 });
