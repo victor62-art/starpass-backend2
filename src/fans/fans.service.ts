@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 
 @Injectable()
@@ -47,5 +47,90 @@ export class FansService {
       include: { creator: true, tier: true },
       orderBy: { expiresAt: 'asc' },
     });
+  }
+
+  async addFavorite(fanAddress: string, creatorId: string) {
+    const fan = await this.prisma.fan.findUnique({ where: { stellarAddress: fanAddress } });
+    if (!fan) throw new NotFoundException('Fan not found');
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+    try {
+      return await this.prisma.favorite.create({ data: { fanId: fan.id, creatorId } });
+    } catch {
+      throw new ConflictException('Creator is already in your favorites');
+    }
+  }
+
+  async removeFavorite(fanAddress: string, creatorId: string) {
+    const fan = await this.prisma.fan.findUnique({ where: { stellarAddress: fanAddress } });
+    if (!fan) throw new NotFoundException('Fan not found');
+    await this.prisma.favorite.deleteMany({ where: { fanId: fan.id, creatorId } });
+    return { message: 'Removed from favorites' };
+  }
+
+  async getFavorites(fanAddress: string) {
+    const fan = await this.prisma.fan.findUnique({ where: { stellarAddress: fanAddress } });
+    if (!fan) throw new NotFoundException('Fan not found');
+    const favorites = await this.prisma.favorite.findMany({
+      where: { fanId: fan.id },
+      include: { creator: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return favorites.map((f) => ({ ...f.creator, savedAt: f.createdAt }));
+  }
+
+  async getActivity(
+    stellarAddress: string,
+    typeFilter: string | undefined,
+    page: number,
+    limit: number,
+  ) {
+    const fan = await this.prisma.fan.findUnique({ where: { stellarAddress } });
+    if (!fan) throw new NotFoundException('Fan not found');
+
+    const skip = (page - 1) * limit;
+    const now = new Date();
+
+    const passes = await this.prisma.pass.findMany({
+      where: { fanId: fan.id },
+      include: {
+        tier: { select: { name: true, onChainId: true } },
+        creator: { select: { displayName: true, stellarAddress: true } },
+      },
+      orderBy: { purchasedAt: 'desc' },
+    });
+
+    const events: Array<{ type: string; data: Record<string, unknown>; createdAt: Date }> = [];
+
+    for (const pass of passes) {
+      events.push({
+        type: 'pass_purchased',
+        data: {
+          passId: pass.id,
+          tierName: pass.tier.name,
+          creatorName: pass.creator.displayName,
+          creatorAddress: pass.creator.stellarAddress,
+          expiresAt: pass.expiresAt,
+        },
+        createdAt: pass.purchasedAt,
+      });
+
+      if (pass.expiresAt < now) {
+        events.push({
+          type: 'pass_expired',
+          data: {
+            passId: pass.id,
+            tierName: pass.tier.name,
+            creatorName: pass.creator.displayName,
+          },
+          createdAt: pass.expiresAt,
+        });
+      }
+    }
+
+    const filtered = typeFilter ? events.filter((e) => e.type === typeFilter) : events;
+    filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return { data: filtered.slice(skip, skip + limit), total: filtered.length, page, limit };
   }
 }
