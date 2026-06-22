@@ -1,6 +1,7 @@
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Request, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TiersService } from './tiers.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('tiers')
 @Controller('tiers')
@@ -24,5 +25,23 @@ export class TiersController {
     @Param('onChainId', ParseIntPipe) onChainId: number,
   ) {
     return this.tiersService.findOne(address, onChainId);
+  }
+
+  @Post('creator/:address/bulk')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk create up to 10 tiers for a creator (atomic)' })
+  @ApiResponse({ status: 201, description: 'All tiers created' })
+  @ApiResponse({ status: 400, description: 'More than 10 tiers or validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Creator not found' })
+  bulkCreate(
+    @Param('address') address: string,
+    @Body() body: {
+      tiers: Array<{ name: string; description?: string; priceUsdc: string; durationDays: number; maxSupply?: number }>;
+    },
+    @Request() req: any,
+  ) {
+    return this.tiersService.bulkCreate(req.user.address, body.tiers);
   }
 }
