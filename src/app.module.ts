@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { HttpLoggerMiddleware } from './common/http-logger.middleware';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { AuthModule } from './auth/auth.module';
 import { CreatorsModule } from './creators/creators.module';
 import { FansModule } from './fans/fans.module';
@@ -12,6 +13,7 @@ import { DevModule } from './dev/dev.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { GraphqlAppModule } from './graphql/graphql.module';
 
 @Module({
   imports: [
@@ -19,18 +21,18 @@ import { AdminModule } from './admin/admin.module';
     ThrottlerModule.forRoot([
       {
         name: 'auth-login',
-        ttl: 60000, // 1 minute in milliseconds
-        limit: 10, // max 10 requests per minute
+        ttl: 60000,
+        limit: 10,
       },
       {
         name: 'auth-nonce',
-        ttl: 60000, // 1 minute in milliseconds
-        limit: 20, // max 20 requests per minute
+        ttl: 60000,
+        limit: 20,
       },
       {
         name: 'default',
         ttl: 60000,
-        limit: 100, // default limit for other endpoints
+        limit: 100,
       },
     ]),
     AuthModule,
@@ -44,6 +46,7 @@ import { AdminModule } from './admin/admin.module';
     WebhooksModule,
     NotificationsModule,
     AdminModule,
+    GraphqlAppModule,
   ],
 })
 export class AppModule implements NestModule {
