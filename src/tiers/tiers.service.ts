@@ -6,6 +6,31 @@ export class TiersService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * Find a paginated list of tiers.
+   *
+   * @param page The page number to retrieve.
+   * @param limit The maximum number of tiers per page.
+   * @param creatorId Optional creator id to filter tiers by.
+   * @returns An object containing the list of tiers, total count, page, and limit.
+   */
+  async findAll(page = 1, limit = 20, creatorId?: string) {
+    const where = creatorId ? { creatorId } : {};
+    const skip = (page - 1) * limit;
+
+    const [tiers, total] = await Promise.all([
+      this.prisma.tier.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { onChainId: 'asc' },
+      }),
+      this.prisma.tier.count({ where }),
+    ]);
+
+    return { data: tiers, total, page, limit };
+  }
+
+  /**
    * Get all active tiers for a creator
    * 
    * @param stellarAddress The Stellar public key of the creator.

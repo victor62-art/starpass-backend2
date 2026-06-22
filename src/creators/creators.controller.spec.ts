@@ -105,9 +105,9 @@ describe('CreatorsController', () => {
     });
 
     it('should throw ForbiddenException when authenticated user does not match path id', async () => {
-      await expect(
+      expect(() =>
         controller.getRevenue('user-123', { user: { sub: 'user-456' } }),
-      ).rejects.toThrowError('You are not authorized to access this creator revenue summary');
+      ).toThrowError('You are not authorized to access this creator revenue summary');
     });
   });
 

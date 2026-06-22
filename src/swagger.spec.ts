@@ -8,14 +8,22 @@ import { PrismaService } from './common/prisma.service';
 describe('Swagger Documentation', () => {
   let app: INestApplication;
   let originalEnv: string | undefined;
+  let originalIndexerEnabled: string | undefined;
 
   beforeEach(() => {
     jest.setTimeout(30000);
     originalEnv = process.env.NODE_ENV;
+    originalIndexerEnabled = process.env.INDEXER_ENABLED;
+    process.env.INDEXER_ENABLED = 'false';
   });
 
   afterEach(async () => {
     process.env.NODE_ENV = originalEnv;
+    if (originalIndexerEnabled === undefined) {
+      delete process.env.INDEXER_ENABLED;
+    } else {
+      process.env.INDEXER_ENABLED = originalIndexerEnabled;
+    }
     if (app) {
       await app.close();
     }

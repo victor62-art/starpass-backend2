@@ -4,7 +4,6 @@ import { PassesService } from './passes.service';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { EmailService } from '../notifications/email.service';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('PassesService', () => {
   let service: PassesService;
