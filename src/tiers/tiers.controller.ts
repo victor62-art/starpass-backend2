@@ -8,6 +8,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 export class TiersController {
   constructor(private tiersService: TiersService) {}
 
+  @Get(':id/prices')
+  @ApiOperation({ summary: 'List all prices for a tier' })
+  @ApiResponse({ status: 200, description: 'Return list of tier prices' })
+  @ApiResponse({ status: 404, description: 'Tier not found' })
+  getPrices(@Param('id') id: string) {
+    return this.tiersService.getTierPrices(id);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List tiers with pagination' })
   @ApiQuery({ name: 'page', required: false, type: Number })

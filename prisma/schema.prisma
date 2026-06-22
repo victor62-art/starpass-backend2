@@ -120,25 +120,38 @@ model Fan {
 }
 
 model Tier {
-  id           String   @id @default(uuid())
-  onChainId    Int      @map("on_chain_id")
-  creatorId    String   @map("creator_id")
+  id           String        @id @default(uuid())
+  onChainId    Int           @map("on_chain_id")
+  creatorId    String        @map("creator_id")
   name         String
   description  String?
-  priceUsdc    Decimal  @map("price_usdc")
-  durationDays Int      @map("duration_days")
-  maxSupply    Int      @default(0) @map("max_supply")
-  minted       Int      @default(0)
-  active       Boolean  @default(true)
-  syncedAt     DateTime @map("synced_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  creator      Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  priceUsdc    Decimal       @map("price_usdc")
+  durationDays Int           @map("duration_days")
+  maxSupply    Int           @default(0) @map("max_supply")
+  minted       Int           @default(0)
+  active       Boolean       @default(true)
+  syncedAt     DateTime      @map("synced_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  creator      Creator       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   passes       Pass[]
   waitlist     WaitlistEntry[]
   earningsRecords EarningsRecord[]
+  prices       TierPrice[]
   @@unique([creatorId, onChainId])
   @@map("tiers")
+}
+
+model TierPrice {
+  id        String   @id @default(uuid())
+  tierId    String   @map("tier_id")
+  token     String
+  amount    Decimal
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  tier      Tier     @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  @@unique([tierId, token])
+  @@map("tier_prices")
 }
 
 model WaitlistEntry {

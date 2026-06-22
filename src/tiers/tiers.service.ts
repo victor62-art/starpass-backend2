@@ -22,6 +22,27 @@ export class TiersService {
   ) {}
 
   /**
+   * Get all prices for a tier
+   * @param tierId The unique identifier of the tier.
+   * @returns A list of tier prices.
+   * @throws {NotFoundException} If the tier is not found.
+   */
+  async getTierPrices(tierId: string) {
+    const tier = await this.prisma.tier.findUnique({
+      where: { id: tierId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Tier not found');
+    }
+
+    return this.prisma.tierPrice.findMany({
+      where: { tierId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
    * Get all active tiers for a creator
    *
    * @param stellarAddress The Stellar public key of the creator.
