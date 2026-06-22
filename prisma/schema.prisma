@@ -152,6 +152,21 @@ model Pass {
   @@map("passes")
 }
 
+model EarningsRecord {
+  id        String   @id @default(uuid())
+  creatorId String   @map("creator_id")
+  fanId     String   @map("fan_id")
+  tierId    String   @map("tier_id")
+  amount    Decimal  @map("amount")
+  fee       Decimal  @default(0) @map("fee")
+  netAmount Decimal  @map("net_amount")
+  createdAt DateTime @default(now()) @map("created_at")
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  fan       Fan      @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  tier      Tier     @relation(fields: [tierId], references: [id])
+  @@map("earnings_records")
+}
+
 model IndexerCheckpoint {
   id         String   @id @default("singleton")
   lastLedger Int      @default(0) @map("last_ledger")

@@ -78,7 +78,7 @@ describe('PassesService', () => {
     };
 
     const mockCreator = { id: 'creator-uuid', stellarAddress: 'GB_CREATOR' };
-    const mockTier = { id: 'tier-uuid', onChainId: 10, creatorId: 'creator-uuid' };
+    const mockTier = { id: 'tier-uuid', onChainId: 10, creatorId: 'creator-uuid', priceUsdc: '25.00' };
     const mockFan = { id: 'fan-uuid', stellarAddress: 'GB_FAN' };
     const mockPass = { id: 'pass-uuid', onChainId: BigInt(1), creatorId: 'creator-uuid' };
 
@@ -111,6 +111,33 @@ describe('PassesService', () => {
         mockPass,
       );
       expect(result).toEqual(mockPass);
+    });
+
+    it('should record an earnings record on new pass purchase', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(null);
+      mockPrismaService.pass.upsert.mockResolvedValue(mockPass);
+
+      await service.upsertFromChain(mockData);
+
+      expect(mockPrismaService.earningsRecord.create).toHaveBeenCalledWith({
+        data: {
+          creatorId: mockCreator.id,
+          fanId: mockFan.id,
+          tierId: mockTier.id,
+          amount: 25,
+          fee: 0,
+          netAmount: 25,
+        },
+      });
+    });
+
+    it('should NOT record earnings when updating an existing pass', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(mockPass);
+      mockPrismaService.pass.upsert.mockResolvedValue(mockPass);
+
+      await service.upsertFromChain(mockData);
+
+      expect(mockPrismaService.earningsRecord.create).not.toHaveBeenCalled();
     });
 
     it('should update existing pass and NOT trigger webhook delivery', async () => {
