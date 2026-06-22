@@ -196,4 +196,68 @@ describe('PassesService', () => {
       );
     });
   });
+
+  describe('getMetadata', () => {
+    const purchasedAt = new Date('2026-01-01T00:00:00.000Z');
+    const expiresAt = new Date('2026-12-31T23:59:59.000Z');
+    const mockPass = {
+      id: 'pass-uuid',
+      onChainId: BigInt(42),
+      active: true,
+      purchasedAt,
+      expiresAt,
+      tier: {
+        id: 'tier-uuid',
+        name: 'Gold Tier',
+      },
+      creator: {
+        id: 'creator-uuid',
+        displayName: 'Awesome Creator',
+        avatarUrl: 'https://example.com/avatar.png',
+      },
+    };
+
+    it('should return NFT-style metadata for a valid pass', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(mockPass);
+
+      const result = await service.getMetadata('pass-uuid');
+
+      expect(prisma.pass.findUnique).toHaveBeenCalledWith({
+        where: { id: 'pass-uuid' },
+        include: { tier: true, creator: true },
+      });
+      expect(result).toEqual({
+        name: 'Awesome Creator - Gold Tier Pass',
+        description: 'A StarPass for Gold Tier tier from Awesome Creator',
+        image: 'https://example.com/avatar.png',
+        attributes: expect.arrayContaining([
+          { trait_type: 'Tier Name', value: 'Gold Tier' },
+          { trait_type: 'Creator', value: 'Awesome Creator' },
+          { trait_type: 'Purchased At', value: purchasedAt.toISOString() },
+          { trait_type: 'Expires At', value: expiresAt.toISOString() },
+          { trait_type: 'Status', value: 'active' },
+        ]),
+      });
+    });
+
+    it('should return expired status for an inactive or expired pass', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue({
+        ...mockPass,
+        active: false,
+      });
+
+      const result = await service.getMetadata('pass-uuid');
+      expect(result.attributes).toEqual(
+        expect.arrayContaining([{ trait_type: 'Status', value: 'expired' }])
+      );
+    });
+
+    it('should throw NotFoundException when the pass is not found', async () => {
+      mockPrismaService.pass.findUnique.mockResolvedValue(null);
+
+      await expect(service.getMetadata('missing-pass')).rejects.toBeInstanceOf(
+        NotFoundException
+      );
+    });
+  });
 });
