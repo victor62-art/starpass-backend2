@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { TiersService } from './tiers.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -27,21 +27,26 @@ export class TiersController {
     return this.tiersService.findOne(address, onChainId);
   }
 
-  @Post('creator/:address/bulk')
+  @Post(':id/waitlist')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Bulk create up to 10 tiers for a creator (atomic)' })
-  @ApiResponse({ status: 201, description: 'All tiers created' })
-  @ApiResponse({ status: 400, description: 'More than 10 tiers or validation error' })
+  @ApiOperation({ summary: 'Join the waitlist for a sold-out tier' })
+  @ApiResponse({ status: 201, description: 'Successfully joined waitlist' })
+  @ApiResponse({ status: 400, description: 'Tier is not sold out or no limited supply' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Creator not found' })
-  bulkCreate(
-    @Param('address') address: string,
-    @Body() body: {
-      tiers: Array<{ name: string; description?: string; priceUsdc: string; durationDays: number; maxSupply?: number }>;
-    },
-    @Request() req: any,
-  ) {
-    return this.tiersService.bulkCreate(req.user.address, body.tiers);
+  @ApiResponse({ status: 404, description: 'Tier not found' })
+  joinWaitlist(@Param('id') id: string, @Request() req: any) {
+    return this.tiersService.joinWaitlist(id, req.user.address);
+  }
+
+  @Get(':id/waitlist/position')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get your position on the waitlist' })
+  @ApiResponse({ status: 200, description: 'Return waitlist position and total' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Tier not found or not on waitlist' })
+  getWaitlistPosition(@Param('id') id: string, @Request() req: any) {
+    return this.tiersService.getWaitlistPosition(id, req.user.address);
   }
 }

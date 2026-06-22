@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class TiersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(TiersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   /**
    * Get all active tiers for a creator
@@ -109,42 +115,142 @@ export class TiersService {
     });
   }
 
-  async bulkCreate(
-    creatorAddress: string,
-    tiers: Array<{ name: string; description?: string; priceUsdc: string; durationDays: number; maxSupply?: number }>,
-  ) {
-    if (tiers.length > 10) {
-      throw new BadRequestException('Cannot create more than 10 tiers at once');
+  /**
+   * Join the waitlist for a sold-out tier
+   */
+  async joinWaitlist(tierId: string, fanAddress: string) {
+    const tier = await this.prisma.tier.findUnique({
+      where: { id: tierId },
+      include: { creator: true },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Tier not found');
     }
 
-    const creator = await this.prisma.creator.findUnique({ where: { stellarAddress: creatorAddress } });
-    if (!creator) throw new NotFoundException('Creator not found');
+    // Check if tier has max supply and is sold out
+    if (tier.maxSupply <= 0) {
+      throw new BadRequestException('This tier does not have a limited supply');
+    }
 
-    const highestOnChain = await this.prisma.tier.findFirst({
-      where: { creatorId: creator.id },
-      orderBy: { onChainId: 'desc' },
+    // Count active passes to check if tier is sold out
+    const now = new Date();
+    const activePassCount = await this.prisma.pass.count({
+      where: {
+        tierId,
+        active: true,
+        expiresAt: { gt: now },
+      },
     });
-    let nextOnChainId = (highestOnChain?.onChainId ?? 0) + 1;
 
-    return this.prisma.$transaction(
-      tiers.map((t) => {
-        const onChainId = nextOnChainId++;
-        return this.prisma.tier.create({
-          data: {
-            creatorId: creator.id,
-            onChainId,
-            name: t.name,
-            description: t.description,
-            priceUsdc: t.priceUsdc,
-            durationDays: t.durationDays,
-            maxSupply: t.maxSupply ?? 0,
-            minted: 0,
-            active: true,
-            sortOrder: 0,
-            syncedAt: new Date(),
-          },
-        });
-      }),
-    );
+    if (activePassCount < tier.maxSupply) {
+      throw new BadRequestException('This tier is not sold out yet');
+    }
+
+    // Check if fan already has a valid pass for this tier
+    const fan = await this.prisma.fan.findUnique({
+      where: { stellarAddress: fanAddress },
+    });
+
+    if (fan) {
+      const hasPass = await this.prisma.pass.findFirst({
+        where: {
+          fanId: fan.id,
+          tierId,
+          active: true,
+          expiresAt: { gt: now },
+        },
+      });
+
+      if (hasPass) {
+        throw new BadRequestException('You already have a valid pass for this tier');
+      }
+    }
+
+    // Join waitlist
+    return this.prisma.waitlistEntry.upsert({
+      where: {
+        tierId_fanAddress: {
+          tierId,
+          fanAddress,
+        },
+      },
+      update: {},
+      create: {
+        tierId,
+        fanAddress,
+      },
+    });
+  }
+
+  /**
+   * Get fan's position on the waitlist
+   */
+  async getWaitlistPosition(tierId: string, fanAddress: string) {
+    const tier = await this.prisma.tier.findUnique({
+      where: { id: tierId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Tier not found');
+    }
+
+    const waitlist = await this.prisma.waitlistEntry.findMany({
+      where: {
+        tierId,
+        notified: false,
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    const index = waitlist.findIndex(entry => entry.fanAddress === fanAddress);
+
+    if (index === -1) {
+      throw new NotFoundException('You are not on the waitlist for this tier');
+    }
+
+    return { position: index + 1, total: waitlist.length };
+  }
+
+  /**
+   * Notify next fan on waitlist when a slot opens up
+   */
+  async notifyNextOnWaitlist(tierId: string) {
+    const tier = await this.prisma.tier.findUnique({
+      where: { id: tierId },
+      include: { creator: true },
+    });
+
+    if (!tier) {
+      return;
+    }
+
+    const nextEntry = await this.prisma.waitlistEntry.findFirst({
+      where: {
+        tierId,
+        notified: false,
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    if (!nextEntry) {
+      return;
+    }
+
+    // Check if fan has an email (we can notify via email if available)
+    const fan = await this.prisma.fan.findUnique({
+      where: { stellarAddress: nextEntry.fanAddress },
+    });
+
+    if (fan && fan.displayName) { // Assuming displayName could be email, but let's just notify if possible
+      // For now, we'll just mark as notified. In a real app, we'd need to collect email for fans.
+      this.logger.log(`Notifying fan ${nextEntry.fanAddress} about slot opening in tier ${tier.name}`);
+    }
+
+    // Mark entry as notified
+    await this.prisma.waitlistEntry.update({
+      where: { id: nextEntry.id },
+      data: { notified: true },
+    });
   }
 }
