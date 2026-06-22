@@ -210,12 +210,10 @@ export class PassesService {
 
     if (!creator || !tier) return null;
 
-    const block = await this.prisma.block.findUnique({
+    const block = await this.prisma.block.findFirst({
       where: {
-        creatorId_blockedAddress: {
-          creatorId: creator.id,
-          blockedAddress: data.fanAddress,
-        },
+        creatorId: creator.id,
+        blockedAddress: data.fanAddress,
       },
     });
 
