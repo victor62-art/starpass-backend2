@@ -2,14 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CreatorsService } from './creators.service';
 import { PrismaService } from '../common/prisma.service';
+import { UpdateCreatorDto } from './dto/update-creator.dto';
 
 describe('CreatorsService', () => {
   let service: CreatorsService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     creator: {
       findUnique: jest.fn(),
+      update: jest.fn(),
     },
     pass: {
       findMany: jest.fn(),
@@ -30,7 +31,6 @@ describe('CreatorsService', () => {
     }).compile();
 
     service = module.get<CreatorsService>(CreatorsService);
-    prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
   });
 
@@ -67,8 +67,8 @@ describe('CreatorsService', () => {
         ],
       });
 
-      expect(prisma.creator.findUnique).toHaveBeenCalledWith({ where: { userId: 'user-123' } });
-      expect(prisma.pass.findMany).toHaveBeenCalledWith({
+      expect(mockPrismaService.creator.findUnique).toHaveBeenCalledWith({ where: { userId: 'user-123' } });
+      expect(mockPrismaService.pass.findMany).toHaveBeenCalledWith({
         where: { creatorId: creator.id },
         include: { tier: true },
       });
