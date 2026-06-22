@@ -156,6 +156,11 @@ export class PassesService {
       throw new ForbiddenException('Only the pass owner can view this receipt');
     }
 
+    const feeBps = await this.adminConfigService.getCurrentFeeBps();
+    const priceUsdc = parseFloat(pass.tier.priceUsdc.toString());
+    const feeAmount = parseFloat(((priceUsdc * feeBps) / 10000).toFixed(6));
+    const creatorAmount = parseFloat((priceUsdc - feeAmount).toFixed(6));
+
     return {
       pass: {
         id: pass.id,
@@ -167,6 +172,9 @@ export class PassesService {
       creator: pass.creator,
       purchasedAt: pass.purchasedAt,
       amount: pass.tier.priceUsdc.toString(),
+      feeBps,
+      feeAmount: feeAmount.toString(),
+      creatorAmount: creatorAmount.toString(),
       txHash: pass.txHash ?? null,
     };
   }
