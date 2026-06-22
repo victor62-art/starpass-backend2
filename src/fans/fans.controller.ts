@@ -4,7 +4,7 @@ import { FansService } from './fans.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('fans')
-@Controller('fans')
+@Controller({ path: 'fans', version: '1' })
 export class FansController {
   constructor(private fansService: FansService) {}
 

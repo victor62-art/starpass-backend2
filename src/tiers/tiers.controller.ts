@@ -4,7 +4,7 @@ import { TiersService } from './tiers.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('tiers')
-@Controller('tiers')
+@Controller({ path: 'tiers', version: '1' })
 export class TiersController {
   constructor(private tiersService: TiersService) {}
 

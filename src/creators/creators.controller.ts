@@ -11,7 +11,7 @@ import { CreatorAnalyticsDto } from './creator-analytics.dto';
 import { BlockFanDto } from './dto/block-fan.dto';
 
 @ApiTags('creators')
-@Controller('creators')
+@Controller({ path: 'creators', version: '1' })
 export class CreatorsController {
   constructor(
     private creatorsService: CreatorsService,
