@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@ne
 import { CreatorsService } from './creators.service';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
+import { AddMemberDto } from './dto/add-member.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { RegisterWebhookDto } from '../webhooks/dto/register-webhook.dto';
@@ -125,5 +126,27 @@ export class CreatorsController {
     @Param('webhookId') webhookId: string,
   ) {
     return this.webhooksService.remove(id, webhookId);
+  }
+
+  @Post(':id/members')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add a co-owner or editor to a creator profile (owner only)' })
+  @ApiResponse({ status: 201, description: 'Member added' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 409, description: 'Member already exists' })
+  addMember(@Param('id') id: string, @Request() req: any, @Body() dto: AddMemberDto) {
+    return this.creatorsService.addMember(id, req.user.address, dto.address, dto.role);
+  }
+
+  @Delete(':id/members/:address')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Remove a member from a creator profile (owner only)' })
+  @ApiResponse({ status: 200, description: 'Member removed' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Member not found' })
+  removeMember(@Param('id') id: string, @Param('address') address: string, @Request() req: any) {
+    return this.creatorsService.removeMember(id, req.user.address, address);
   }
 }

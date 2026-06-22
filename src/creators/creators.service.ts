@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
@@ -292,5 +292,52 @@ export class CreatorsService {
 
     if (!activeAtStart) return 0;
     return Number(((activeAtEnd / activeAtStart) * 100).toFixed(1));
+  }
+
+  // ── Co-ownership ──────────────────────────────────────────────────────────
+
+  private async requireOwner(creatorId: string, callerAddress: string) {
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    const isOwner =
+      creator.stellarAddress === callerAddress ||
+      !!(await this.prisma.creatorMember.findFirst({
+        where: { creatorId, address: callerAddress, role: 'OWNER' },
+      }));
+
+    if (!isOwner) throw new ForbiddenException('Only owners can manage members');
+    return creator;
+  }
+
+  async addMember(creatorId: string, callerAddress: string, address: string, role: 'OWNER' | 'EDITOR') {
+    await this.requireOwner(creatorId, callerAddress);
+
+    const existing = await this.prisma.creatorMember.findUnique({
+      where: { creatorId_address: { creatorId, address } },
+    });
+    if (existing) throw new ConflictException('Member already exists');
+
+    return this.prisma.creatorMember.create({ data: { creatorId, address, role } });
+  }
+
+  async removeMember(creatorId: string, callerAddress: string, address: string) {
+    await this.requireOwner(creatorId, callerAddress);
+
+    const member = await this.prisma.creatorMember.findUnique({
+      where: { creatorId_address: { creatorId, address } },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+
+    await this.prisma.creatorMember.delete({ where: { creatorId_address: { creatorId, address } } });
+    return { message: 'Member removed' };
+  }
+
+  async isMemberOrOwner(creatorId: string, callerAddress: string): Promise<boolean> {
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) return false;
+    if (creator.stellarAddress === callerAddress) return true;
+    const member = await this.prisma.creatorMember.findFirst({ where: { creatorId, address: callerAddress } });
+    return !!member;
   }
 }
