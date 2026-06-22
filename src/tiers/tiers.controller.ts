@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, ParseIntPipe, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TiersService } from './tiers.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -7,6 +7,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 @Controller({ path: 'tiers', version: '1' })
 export class TiersController {
   constructor(private tiersService: TiersService) {}
+
+  @Get(':id/prices')
+  @ApiOperation({ summary: 'List all prices for a tier' })
+  @ApiResponse({ status: 200, description: 'Return list of tier prices' })
+  @ApiResponse({ status: 404, description: 'Tier not found' })
+  getPrices(@Param('id') id: string) {
+    return this.tiersService.getTierPrices(id);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List tiers with pagination' })

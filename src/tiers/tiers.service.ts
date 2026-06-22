@@ -3,11 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
-import { EmailService } from '../notifications/email.service';
-import { CreateTierDto } from './dto/create-tier.dto';
+import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'crypto';
 
 const UNLOCK_TTL_SECONDS = 15 * 60; // 15 minutes
 
@@ -27,6 +26,27 @@ export class TiersService {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {}
+
+  /**
+   * Get all prices for a tier
+   * @param tierId The unique identifier of the tier.
+   * @returns A list of tier prices.
+   * @throws {NotFoundException} If the tier is not found.
+   */
+  async getTierPrices(tierId: string) {
+    const tier = await this.prisma.tier.findUnique({
+      where: { id: tierId },
+    });
+
+    if (!tier) {
+      throw new NotFoundException('Tier not found');
+    }
+
+    return this.prisma.tierPrice.findMany({
+      where: { tierId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
 
   /**
    * Get all active tiers for a creator
