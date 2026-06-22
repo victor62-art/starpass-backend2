@@ -4,6 +4,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { ListPassesDto } from './dto/list-passes.dto';
 import { EmailService } from '../notifications/email.service';
 import { TiersService } from '../tiers/tiers.service';
+import { AdminConfigService } from '../admin/admin-config.service';
 
 @Injectable()
 export class PassesService {
@@ -14,6 +15,7 @@ export class PassesService {
     private webhooksService: WebhooksService,
     private emailService: EmailService,
     private tiersService: TiersService,
+    private adminConfigService: AdminConfigService,
   ) {}
 
   /**
@@ -206,12 +208,10 @@ export class PassesService {
 
     if (!creator || !tier) return null;
 
-    const block = await this.prisma.block.findUnique({
+    const block = await this.prisma.block.findFirst({
       where: {
-        creatorId_fanAddress: {
-          creatorId: creator.id,
-          fanAddress: data.fanAddress,
-        },
+        creatorId: creator.id,
+        blockedAddress: data.fanAddress,
       },
     });
 
