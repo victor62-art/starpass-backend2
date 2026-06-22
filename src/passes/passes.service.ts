@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ListPassesDto } from './dto/list-passes.dto';
@@ -15,9 +15,9 @@ export class PassesService {
     private prisma: PrismaService,
     private webhooksService: WebhooksService,
     private emailService: EmailService,
-    private tiersService: TiersService,
+    @Optional() private tiersService?: TiersService,
     private adminConfigService: AdminConfigService,
-    private metricsService: MetricsService,
+    @Optional() private metricsService?: MetricsService,
   ) {}
 
   /**
