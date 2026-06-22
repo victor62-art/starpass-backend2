@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, NotFoundException, ConflictException } from '@nestjs/common';
+import { INestApplication, NotFoundException, ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { FansController } from './fans.controller';
 import { FansService } from './fans.service';
 
@@ -17,6 +17,7 @@ describe('FansController (Integration)', () => {
     deletionRequestedAt: null,
     anonymized: false,
     permanentlyDeletedAt: null,
+    lastExportRequestedAt: null,
   };
 
   const mockFansService = {
@@ -24,6 +25,7 @@ describe('FansController (Integration)', () => {
     getSubscriptions: jest.fn(),
     getDeletionStatus: jest.fn(),
     requestDeletion: jest.fn(),
+    requestDataExport: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -154,6 +156,42 @@ describe('FansController (Integration)', () => {
       );
 
       await app.get(`/fans/nonexistent-address/deletion-status`).expect(404);
+    });
+  });
+
+  describe('POST /fans/:address/data-export', () => {
+    it('should return data export', async () => {
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        profile: { stellarAddress: mockFan.stellarAddress, displayName: mockFan.displayName, createdAt: mockFan.createdAt },
+        passes: [],
+        earnings: [],
+      };
+
+      mockFansService.requestDataExport.mockResolvedValue(exportData);
+
+      const result = await app
+        .post(`/fans/${mockFan.stellarAddress}/data-export`)
+        .expect(200);
+
+      expect(result.body).toEqual(exportData);
+      expect(mockFansService.requestDataExport).toHaveBeenCalledWith(mockFan.stellarAddress);
+    });
+
+    it('should return 404 when fan not found', async () => {
+      mockFansService.requestDataExport.mockRejectedValue(
+        new NotFoundException('Fan not found'),
+      );
+
+      await app.post(`/fans/nonexistent-address/data-export`).expect(404);
+    });
+
+    it('should return 429 when rate limited', async () => {
+      mockFansService.requestDataExport.mockRejectedValue(
+        new HttpException('Rate limited', HttpStatus.TOO_MANY_REQUESTS),
+      );
+
+      await app.post(`/fans/${mockFan.stellarAddress}/data-export`).expect(429);
     });
   });
 
