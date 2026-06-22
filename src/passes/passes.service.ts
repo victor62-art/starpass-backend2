@@ -5,6 +5,7 @@ import { ListPassesDto } from './dto/list-passes.dto';
 import { EmailService } from '../notifications/email.service';
 import { TiersService } from '../tiers/tiers.service';
 import { AdminConfigService } from '../admin/admin-config.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class PassesService {
@@ -16,6 +17,7 @@ export class PassesService {
     private emailService: EmailService,
     private tiersService: TiersService,
     private adminConfigService: AdminConfigService,
+    private metricsService: MetricsService,
   ) {}
 
   /**
@@ -334,6 +336,10 @@ export class PassesService {
         { trait_type: 'Status', value: status },
       ],
     };
+  }
+
+  async findById(id: string) {
+    return this.prisma.pass.findUnique({ where: { id }, include: { tier: true, creator: true, fan: true } });
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { CreatorsService } from './creators.service';
+import { CreateContentScheduleDto } from './dto/create-content-schedule.dto';
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
 import { ListPayoutsDto } from './dto/list-payouts.dto';
@@ -191,6 +192,22 @@ export class CreatorsController {
     @Param('webhookId') webhookId: string,
   ) {
     return this.webhooksService.remove(id, webhookId);
+  }
+
+  @Post(':id/schedule')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Schedule content to become available to pass holders' })
+  @ApiResponse({ status: 201, description: 'Content scheduled' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  scheduleContent(
+    @Param('id') id: string,
+    @Body() dto: CreateContentScheduleDto,
+    @Request() req: any,
+  ) {
+    if (req.user?.sub !== id) throw new ForbiddenException('You can only schedule content for your own creator profile');
+    return this.creatorsService.createContentSchedule(id, dto);
   }
 
   @Get(':id/payouts')

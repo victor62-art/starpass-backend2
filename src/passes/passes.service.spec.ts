@@ -32,6 +32,9 @@ describe('PassesService', () => {
     block: {
       findUnique: jest.fn(),
     },
+    earningsRecord: {
+      create: jest.fn(),
+    },
   };
 
   const mockWebhooksService = {

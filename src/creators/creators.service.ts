@@ -1,5 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const ACTIVATION_BATCH_SIZE = 100;
 import { CreateCreatorDto } from './dto/create-creator.dto';
 import { UpdateCreatorDto } from './dto/update-creator.dto';
 import { CreatorAnalyticsDto } from './creator-analytics.dto';
@@ -7,7 +10,9 @@ import { ListPayoutsDto } from './dto/list-payouts.dto';
 
 @Injectable()
 export class CreatorsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(CreatorsService.name);
+
+  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
 
   async findFeatured() {
     return this.prisma.creator.findMany({
@@ -309,6 +314,47 @@ export class CreatorsService {
     });
   }
 
+  async addMember(creatorId: string, callerAddress: string, newMemberAddress: string, role: 'OWNER' | 'EDITOR') {
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    // If caller is the owner (stellarAddress) they may add members
+    if (callerAddress !== creator.stellarAddress) {
+      // Otherwise check if caller is an OWNER member
+      const callerMember = await this.prisma.creatorMember.findFirst({ where: { creatorId, address: callerAddress } });
+      if (!callerMember || callerMember.role !== 'OWNER') throw new ForbiddenException('Not authorized to add members');
+    }
+
+    const existing = await this.prisma.creatorMember.findUnique({ where: { creatorId_address: { creatorId, address: newMemberAddress } } });
+    if (existing) throw new ConflictException('Member already exists');
+
+    return this.prisma.creatorMember.create({ data: { creatorId, address: newMemberAddress, role } });
+  }
+
+  async removeMember(creatorId: string, callerAddress: string, memberAddress: string) {
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    if (callerAddress !== creator.stellarAddress) {
+      const callerMember = await this.prisma.creatorMember.findFirst({ where: { creatorId, address: callerAddress } });
+      if (!callerMember || callerMember.role !== 'OWNER') throw new ForbiddenException('Not authorized to remove members');
+    }
+
+    const member = await this.prisma.creatorMember.findUnique({ where: { creatorId_address: { creatorId, address: memberAddress } } });
+    if (!member) throw new NotFoundException('Member not found');
+
+    await this.prisma.creatorMember.delete({ where: { creatorId_address: { creatorId, address: memberAddress } } });
+    return { message: 'Member removed' };
+  }
+
+  async isMemberOrOwner(creatorId: string, address: string): Promise<boolean> {
+    const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
+    if (!creator) return false;
+    if (creator.stellarAddress === address) return true;
+    const member = await this.prisma.creatorMember.findFirst({ where: { creatorId, address } });
+    return !!member;
+  }
+
   async unblockFan(creatorId: string, fanAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -364,6 +410,76 @@ export class CreatorsService {
         status,
       },
     });
+  }
+
+  async createContentSchedule(ownerUserId: string, dto: { tierId: string; contentUrl: string; availableAt: string }) {
+    const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    const tier = await this.prisma.tier.findUnique({ where: { id: dto.tierId } });
+    if (!tier || tier.creatorId !== creator.id) throw new NotFoundException('Tier not found');
+
+    const availableAt = new Date(dto.availableAt);
+    if (isNaN(availableAt.getTime())) throw new BadRequestException('Invalid availableAt');
+
+    return this.prisma.contentSchedule.create({
+      data: {
+        creatorId: creator.id,
+        tierId: tier.id,
+        contentUrl: dto.contentUrl,
+        availableAt,
+      },
+    });
+  }
+
+  /**
+   * Activate any ContentSchedule entries that are due and notify pass holders.
+   * Idempotent: only activates schedules where active = false.
+   */
+  async activateDueContent() {
+    const now = new Date();
+
+    const due = await this.prisma.contentSchedule.findMany({
+      where: { active: false, availableAt: { lte: now } },
+      orderBy: { availableAt: 'asc' },
+      take: ACTIVATION_BATCH_SIZE,
+    });
+
+    if (due.length === 0) return [];
+
+    const activated: string[] = [];
+
+    for (const schedule of due) {
+      try {
+        // Update schedule to active if still inactive (idempotent)
+        const updated = await this.prisma.contentSchedule.updateMany({
+          where: { id: schedule.id, active: false },
+          data: { active: true },
+        });
+
+        if (updated.count === 0) continue; // another worker already activated
+
+        // Find active, unexpired passes for the tier
+        const passes = await this.prisma.pass.findMany({
+          where: { tierId: schedule.tierId, active: true, expiresAt: { gt: now } },
+          select: { fanId: true },
+        });
+
+        const fanIds = passes.map((p) => p.fanId);
+
+        if (fanIds.length > 0) {
+          const title = 'New content available';
+          const body = `Content is now available for your pass: ${schedule.contentUrl}`;
+          await this.notifications.bulkCreateForFans(fanIds, title, body, { contentUrl: schedule.contentUrl, tierId: schedule.tierId });
+        }
+
+        activated.push(schedule.id);
+      } catch (err) {
+        this.logger.error(`Failed to activate schedule ${schedule.id}: ${err.message ?? err}`);
+      }
+    }
+
+    return activated;
   }
 
   /**
