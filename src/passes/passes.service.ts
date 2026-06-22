@@ -297,6 +297,41 @@ export class PassesService {
   }
 
   /**
+   * Get NFT-style metadata for a pass
+   *
+   * @param passId The pass record id.
+   * @returns NFT-compatible metadata { name, description, image, attributes: [{ trait_type, value }] }
+   * @throws {NotFoundException} If the pass is not found.
+   */
+  async getMetadata(passId: string) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { tier: true, creator: true },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    const now = new Date();
+    const isActive = pass.active && pass.expiresAt > now;
+    const status = isActive ? 'active' : 'expired';
+
+    return {
+      name: `${pass.creator.displayName} - ${pass.tier.name} Pass`,
+      description: `A StarPass for ${pass.tier.name} tier from ${pass.creator.displayName}`,
+      image: pass.creator.avatarUrl ?? '',
+      attributes: [
+        { trait_type: 'Tier Name', value: pass.tier.name },
+        { trait_type: 'Creator', value: pass.creator.displayName },
+        { trait_type: 'Purchased At', value: pass.purchasedAt.toISOString() },
+        { trait_type: 'Expires At', value: pass.expiresAt.toISOString() },
+        { trait_type: 'Status', value: status },
+      ],
+    };
+  }
+
+  /**
    * Find all passes with filtering and pagination
    */
   async findAll(filters: ListPassesDto) {
