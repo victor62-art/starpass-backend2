@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, ParseIntPipe, UseGuards, Request, UseInte
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { TiersService } from './tiers.service';
+import { TierAnalyticsDto } from './tier-analytics.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { XCacheInterceptor } from '../common/cache/cache.interceptor';
 
@@ -16,6 +17,19 @@ export class TiersController {
   @ApiResponse({ status: 404, description: 'Tier not found' })
   getPrices(@Param('id') id: string) {
     return this.tiersService.getTierPrices(id);
+  }
+
+  @Get(':id/analytics')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get tier purchase analytics' })
+  @ApiQuery({ name: 'period', required: false, enum: ['7d', '30d', '90d'] })
+  @ApiResponse({ status: 200, type: TierAnalyticsDto, description: 'Return tier analytics' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Tier not found' })
+  getAnalytics(@Param('id') id: string, @Query('period') period = '30d', @Request() req: any) {
+    return this.tiersService.getAnalytics(id, req.user?.sub, period);
   }
 
   @Get()
