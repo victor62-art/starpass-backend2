@@ -4,6 +4,7 @@ import { PassesService } from './passes.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ListPassesDto } from './dto/list-passes.dto';
 import { PurchaseBundleDto } from './dto/purchase-bundle.dto';
+import { GiftPassDto } from './dto/gift-pass.dto';
 
 @ApiTags('passes')
 @Controller({ path: 'passes', version: '1' })
@@ -91,5 +92,20 @@ export class PassesController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   purchaseBundle(@Body() dto: PurchaseBundleDto, @Request() req: any) {
     return this.passesService.purchaseBundle(dto.tierIds, req.user.address);
+  }
+
+  @Post('gift')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Purchase a pass as a gift for another wallet' })
+  @ApiResponse({ status: 201, description: 'Gift pass created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid tier, recipient, or self-gift' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  giftPass(@Body() dto: GiftPassDto, @Request() req: any) {
+    return this.passesService.giftPass(
+      dto.tierId,
+      req.user.address,
+      dto.recipientAddress,
+    );
   }
 }

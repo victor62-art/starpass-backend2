@@ -76,4 +76,22 @@ describe('EmailService', () => {
 
     expect(mockSendMail).toHaveBeenCalledTimes(1);
   });
+
+  it('should send a safe gift notification email', async () => {
+    mockSendMail.mockResolvedValueOnce(true);
+
+    await service.sendPassGiftEmail(
+      'recipient@example.com',
+      '<Gold>',
+      'GIFT&SENDER',
+    );
+
+    expect(mockSendMail).toHaveBeenCalledWith({
+      from: 'test@starpass.com',
+      to: 'recipient@example.com',
+      subject: 'You received a StarPass gift',
+      html: expect.stringContaining('&lt;Gold&gt;'),
+    });
+    expect(mockSendMail.mock.calls[0][0].html).toContain('GIFT&amp;SENDER');
+  });
 });
