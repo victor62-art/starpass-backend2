@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe, UseInterceptors } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorsService } from './creators.service';
 import { CreateContentScheduleDto } from './dto/create-content-schedule.dto';
 import { CreateCreatorDto } from './dto/create-creator.dto';
