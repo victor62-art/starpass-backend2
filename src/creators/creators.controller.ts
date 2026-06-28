@@ -246,4 +246,40 @@ export class CreatorsController {
   ) {
     return this.creatorsService.getPayouts(id, req.user.sub, query);
   }
+
+  @Post(':id/api-keys')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create an API key' })
+  @ApiResponse({ status: 201, description: 'API key created' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  createApiKey(
+    @Param('id') id: string,
+    @Body() body: { name: string; permissions: string[] },
+    @Request() req: any,
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException('You can only manage API keys for your own profile');
+    }
+    return this.creatorsService.createApiKey(id, body.name, body.permissions);
+  }
+
+  @Delete(':id/api-keys/:keyId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an API key' })
+  @ApiResponse({ status: 200, description: 'API key deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  deleteApiKey(
+    @Param('id') id: string,
+    @Param('keyId') keyId: string,
+    @Request() req: any,
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException('You can only manage API keys for your own profile');
+    }
+    return this.creatorsService.deleteApiKey(id, keyId);
+  }
 }

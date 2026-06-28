@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '../common/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as crypto from 'crypto';
 
 const ACTIVATION_BATCH_SIZE = 100;
 import { CreateCreatorDto } from './dto/create-creator.dto';
@@ -567,5 +568,48 @@ export class CreatorsService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  async createApiKey(ownerUserId: string, name: string, permissions: string[]) {
+    const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    const rawKey = `sk_${crypto.randomBytes(24).toString('hex')}`;
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    const apiKey = await this.prisma.apiKey.create({
+      data: {
+        name,
+        key: hashedKey,
+        creatorId: creator.id,
+        permissions,
+      },
+    });
+
+    return { id: apiKey.id, name: apiKey.name, key: rawKey, permissions: apiKey.permissions };
+  }
+
+  async deleteApiKey(ownerUserId: string, keyId: string) {
+    const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    await this.prisma.apiKey.deleteMany({
+      where: { id: keyId, creatorId: creator.id },
+    });
+
+    return { message: 'API key deleted' };
+  }
+
+  async validateApiKey(rawKey: string) {
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await this.prisma.apiKey.findUnique({ where: { key: hashedKey } });
+    if (!apiKey) return null;
+
+    await this.prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { lastUsed: new Date() },
+    });
+
+    return apiKey;
   }
 }

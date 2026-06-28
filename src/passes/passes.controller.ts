@@ -92,4 +92,29 @@ export class PassesController {
   purchaseBundle(@Body() dto: PurchaseBundleDto, @Request() req: any) {
     return this.passesService.purchaseBundle(dto.tierIds, req.user.address);
   }
+
+  @Post(':id/auto-renew')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Toggle auto-renewal for a pass' })
+  @ApiResponse({ status: 200, description: 'Auto-renewal toggled' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Not the pass owner' })
+  @ApiResponse({ status: 404, description: 'Pass not found' })
+  toggleAutoRenew(@Param('id') id: string, @Request() req: any) {
+    return this.passesService.toggleAutoRenew(id, req.user.address);
+  }
+
+  @Post(':id/change-tier')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change tier of a pass with pro-rating' })
+  @ApiResponse({ status: 200, description: 'Tier changed' })
+  @ApiResponse({ status: 400, description: 'Invalid tier or pass expired' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Not the pass owner' })
+  @ApiResponse({ status: 404, description: 'Pass or tier not found' })
+  changeTier(@Param('id') id: string, @Body() body: { newTierId: string }, @Request() req: any) {
+    return this.passesService.changeTier(id, body.newTierId, req.user.address);
+  }
 }

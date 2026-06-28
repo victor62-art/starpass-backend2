@@ -5,6 +5,7 @@ import { ListPassesDto } from './dto/list-passes.dto';
 import { EmailService } from '../notifications/email.service';
 import { AdminConfigService } from '../admin/admin-config.service';
 import { MetricsService } from '../metrics/metrics.service';
+import { StellarService } from '../stellar/stellar.service';
 
 @Injectable()
 export class PassesService {
@@ -16,6 +17,7 @@ export class PassesService {
     private emailService: EmailService,
     private adminConfigService: AdminConfigService,
     private metricsService: MetricsService,
+    private stellarService: StellarService,
   ) {}
 
   /**
@@ -562,5 +564,185 @@ export class PassesService {
           });
       }
     }
+  }
+
+  async toggleAutoRenew(passId: string, fanAddress: string) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { fan: true },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    if (pass.fan.stellarAddress !== fanAddress) {
+      throw new ForbiddenException('Only the pass owner can toggle auto-renew');
+    }
+
+    const updatedPass = await this.prisma.pass.update({
+      where: { id: passId },
+      data: { autoRenew: !pass.autoRenew },
+    });
+
+    return { autoRenew: updatedPass.autoRenew };
+  }
+
+  async handlePassExpiry(passId: string) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { tier: true, creator: true, fan: true },
+    });
+
+    if (!pass) {
+      return;
+    }
+
+    if (!pass.autoRenew) {
+      return;
+    }
+
+    if (!pass.active) {
+      return;
+    }
+
+    const attempt = await this.prisma.renewalAttempt.create({
+      data: {
+        passId: pass.id,
+        status: 'PENDING',
+      },
+    });
+
+    try {
+      const txHash = await this.stellarService.renewPass(pass.onChainId, pass.tier.onChainId);
+
+      await this.prisma.renewalAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'SUCCESS',
+          txHash,
+        },
+      });
+    } catch (error) {
+      await this.prisma.renewalAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'FAILED',
+          error: error.message,
+        },
+      });
+
+      await this.prisma.pass.update({
+        where: { id: passId },
+        data: { autoRenew: false },
+      });
+
+      await this.prisma.notification.create({
+        data: {
+          fanId: pass.fanId,
+          title: 'Auto-Renewal Failed',
+          body: `Your auto-renewal for ${pass.tier.name} pass failed. Auto-renewal has been disabled. Error: ${error.message}`,
+          data: { passId },
+        },
+      });
+    }
+  }
+
+  async changeTier(passId: string, newTierId: string, fanAddress: string) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { tier: true, fan: true, creator: true },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    if (pass.fan.stellarAddress !== fanAddress) {
+      throw new ForbiddenException('Only the pass owner can change tier');
+    }
+
+    const newTier = await this.prisma.tier.findUnique({
+      where: { id: newTierId },
+    });
+
+    if (!newTier || !newTier.active) {
+      throw new BadRequestException('Invalid or inactive tier');
+    }
+
+    if (newTier.creatorId !== pass.creatorId) {
+      throw new BadRequestException('Can only change to tier from the same creator');
+    }
+
+    const now = new Date();
+    const remainingTime = pass.expiresAt.getTime() - now.getTime();
+
+    if (remainingTime <= 0) {
+      throw new BadRequestException('Pass has already expired');
+    }
+
+    const oldTierDuration = pass.tier.durationDays * 24 * 60 * 60 * 1000;
+    const newTierDuration = newTier.durationDays * 24 * 60 * 60 * 1000;
+
+    const oldTierPrice = Number(pass.tier.priceUsdc);
+    const newTierPrice = Number(newTier.priceUsdc);
+
+    const remainingRatio = remainingTime / oldTierDuration;
+    const oldTierRemainingValue = oldTierPrice * remainingRatio;
+
+    let newExpiresAt: Date;
+    let proRatedCharge: number;
+
+    if (newTierPrice > oldTierRemainingValue) {
+      proRatedCharge = newTierPrice - oldTierRemainingValue;
+      newExpiresAt = new Date(now.getTime() + newTierDuration);
+    } else {
+      proRatedCharge = 0;
+      const newDuration = (oldTierRemainingValue / newTierPrice) * newTierDuration;
+      newExpiresAt = new Date(now.getTime() + newDuration);
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.pass.update({
+        where: { id: passId },
+        data: {
+          active: false,
+          supersededBy: passId,
+        },
+      });
+
+      const onChainId = BigInt(Date.now()) + BigInt(Math.floor(Math.random() * 1000000));
+      const newPass = await tx.pass.create({
+        data: {
+          onChainId,
+          tierId: newTierId,
+          creatorId: pass.creatorId,
+          fanId: pass.fanId,
+          purchasedAt: now,
+          expiresAt: newExpiresAt,
+          syncedAt: now,
+        },
+        include: { tier: true, creator: true },
+      });
+
+      if (newTierPrice > oldTierRemainingValue) {
+        await tx.earningsRecord.create({
+          data: {
+            creatorId: pass.creatorId,
+            fanId: pass.fanId,
+            tierId: newTierId,
+            amount: proRatedCharge,
+            fee: 0,
+            netAmount: proRatedCharge,
+          },
+        });
+      }
+
+      return { newPass, proRatedCharge };
+    });
+
+    this.webhooksService.deliverPassPurchaseWebhook(pass.creatorId, result.newPass).catch(() => {});
+
+    return result;
   }
 }
