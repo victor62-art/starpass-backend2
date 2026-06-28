@@ -9,6 +9,7 @@ import { CreateTierDto } from './dto/create-tier.dto';
 import { TierAnalyticsDto } from './tier-analytics.dto';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 const UNLOCK_TTL_SECONDS = 15 * 60; // 15 minutes
 
@@ -17,6 +18,7 @@ export class TiersService {
   constructor(
     private prisma: PrismaService,
     @Optional() private config?: ConfigService,
+    @Optional() private notificationsGateway?: NotificationsGateway,
   ) {}
 
   /**
@@ -48,7 +50,7 @@ export class TiersService {
     const creator = await this.prisma.creator.findUnique({ where: { stellarAddress: creatorAddress } });
     if (!creator) throw new NotFoundException('Creator not found');
 
-    return this.prisma.$transaction(
+    const createdTiers = await this.prisma.$transaction(
       dtos.map((dto) =>
         this.prisma.tier.create({
           data: {
@@ -65,6 +67,17 @@ export class TiersService {
         }),
       ),
     );
+
+    // Emit new_tier event for each created tier
+    if (this.notificationsGateway) {
+      for (const tier of createdTiers) {
+        this.notificationsGateway.emitNewTierEvent(creatorAddress, tier).catch((err) => {
+          console.error(`Error emitting new_tier event: ${err.message}`);
+        });
+      }
+    }
+
+    return createdTiers;
   }
 
   /**
@@ -141,7 +154,7 @@ export class TiersService {
 
     const durationDays = Math.floor(data.durationSeconds / 86400);
 
-    return this.prisma.tier.upsert({
+    const tier = await this.prisma.tier.upsert({
       where: {
         creatorId_onChainId: {
           creatorId: creator.id,
@@ -169,6 +182,15 @@ export class TiersService {
         syncedAt: new Date(),
       },
     });
+
+    // Emit new_tier event for newly created tiers (not updates)
+    if (this.notificationsGateway && data.active) {
+      this.notificationsGateway.emitNewTierEvent(data.creatorAddress, tier).catch((err) => {
+        console.error(`Error emitting new_tier event: ${err.message}`);
+      });
+    }
+
+    return tier;
   }
 
   async findAll(page: number, limit: number, creatorId?: string) {

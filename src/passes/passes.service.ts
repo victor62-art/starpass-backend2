@@ -1,10 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ListPassesDto } from './dto/list-passes.dto';
 import { EmailService } from '../notifications/email.service';
 import { AdminConfigService } from '../admin/admin-config.service';
 import { MetricsService } from '../metrics/metrics.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class PassesService {
@@ -16,6 +17,7 @@ export class PassesService {
     private emailService: EmailService,
     private adminConfigService: AdminConfigService,
     private metricsService: MetricsService,
+    @Optional() private notificationsGateway?: NotificationsGateway,
   ) {}
 
   /**
@@ -562,5 +564,48 @@ export class PassesService {
           });
       }
     }
+  }
+
+  /**
+   * Check for passes expiring in less than 48 hours and emit notifications
+   * This should be called periodically (e.g., via a scheduled job)
+   */
+  async checkAndNotifyExpiringPasses() {
+    const now = new Date();
+    const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // Find passes that will expire in the next 48 hours
+    const expiringPasses = await this.prisma.pass.findMany({
+      where: {
+        active: true,
+        expiresAt: {
+          gt: now,
+          lte: fortyEightHoursFromNow,
+        },
+      },
+      include: {
+        fan: true,
+        tier: true,
+        creator: true,
+      },
+    });
+
+    // Emit pass_expiring_soon event for each expiring pass
+    if (this.notificationsGateway) {
+      for (const pass of expiringPasses) {
+        this.notificationsGateway
+          .emitPassExpiringSoonEvent(pass.fan.stellarAddress, {
+            id: pass.id,
+            tierName: pass.tier.name,
+            creatorName: pass.creator.displayName,
+            expiresAt: pass.expiresAt,
+          })
+          .catch((err) => {
+            this.logger.error(`Error emitting pass_expiring_soon event: ${err.message}`);
+          });
+      }
+    }
+
+    return expiringPasses.length;
   }
 }
