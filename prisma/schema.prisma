@@ -193,6 +193,23 @@ model Pass {
   @@map("passes")
 }
 
+enum RenewalAttemptStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model RenewalAttempt {
+  id          String               @id @default(uuid())
+  passId      String               @map("pass_id")
+  status      RenewalAttemptStatus @default(PENDING)
+  txHash      String?              @map("tx_hash")
+  error       String?
+  createdAt   DateTime             @default(now()) @map("created_at")
+  pass        Pass                 @relation(fields: [passId], references: [id], onDelete: Cascade)
+  @@map("renewal_attempts")
+}
+
 model EarningsRecord {
   id        String   @id @default(uuid())
   creatorId String   @map("creator_id")

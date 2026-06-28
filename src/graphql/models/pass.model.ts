@@ -33,5 +33,11 @@ export class Pass {
   active: boolean;
 
   @Field()
+  autoRenew: boolean;
+
+  @Field({ nullable: true })
+  supersededBy?: string;
+
+  @Field()
   createdAt: Date;
 }
