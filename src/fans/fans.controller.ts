@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Delete, Param, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Delete, Param, HttpCode, HttpStatus, Query, ValidationPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { FansService } from './fans.service';
 
 @ApiTags('fans')
@@ -16,11 +16,17 @@ export class FansController {
   }
 
   @Get(':address/subscriptions')
-  @ApiOperation({ summary: 'Get active subscriptions for a fan' })
-  @ApiResponse({ status: 200, description: 'Return list of active subscriptions' })
+  @ApiOperation({ summary: 'Get active subscriptions for a fan grouped by creator' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default 20, max 50)' })
+  @ApiResponse({ status: 200, description: 'Return list of active subscriptions grouped by creator' })
   @ApiResponse({ status: 404, description: 'Fan not found' })
-  getSubscriptions(@Param('address') address: string) {
-    return this.fansService.getSubscriptions(address);
+  getSubscriptions(
+    @Param('address') address: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+  ) {
+    return this.fansService.getSubscriptions(address, +page, +limit);
   }
 
   @Get(':address/deletion-status')
