@@ -400,6 +400,156 @@ export class PassesService {
   }
 
   /**
+   * Purchase a pass for another wallet. The sender is recorded as the payer
+   * while the recipient fan owns the created pass.
+   */
+  async giftPass(
+    tierId: string,
+    senderAddress: string,
+    recipientAddress: string,
+  ) {
+    const normalizedSender = senderAddress.trim().toUpperCase();
+    const normalizedRecipient = recipientAddress.trim().toUpperCase();
+
+    if (normalizedSender === normalizedRecipient) {
+      throw new BadRequestException('You cannot gift a pass to yourself');
+    }
+
+    const tier = await this.prisma.tier.findFirst({
+      where: { id: tierId, active: true },
+      include: { creator: true },
+    });
+
+    if (!tier) {
+      throw new BadRequestException('Invalid or inactive tier');
+    }
+
+    const recipientBlock = await this.prisma.block.findFirst({
+      where: {
+        creatorId: tier.creatorId,
+        blockedAddress: normalizedRecipient,
+      },
+    });
+
+    if (recipientBlock) {
+      throw new ForbiddenException('Recipient is blocked by this creator');
+    }
+
+    const purchasedAt = new Date();
+    const expiresAt = new Date(
+      purchasedAt.getTime() + tier.durationDays * 24 * 60 * 60 * 1000,
+    );
+
+    const pass = await this.prisma.$transaction(async (tx) => {
+      const sender = await tx.fan.upsert({
+        where: { stellarAddress: normalizedSender },
+        update: {},
+        create: {
+          stellarAddress: normalizedSender,
+          user: {
+            connectOrCreate: {
+              where: { stellarAddress: normalizedSender },
+              create: { stellarAddress: normalizedSender },
+            },
+          },
+        },
+      });
+      const recipient = await tx.fan.upsert({
+        where: { stellarAddress: normalizedRecipient },
+        update: {},
+        create: {
+          stellarAddress: normalizedRecipient,
+          user: {
+            connectOrCreate: {
+              where: { stellarAddress: normalizedRecipient },
+              create: { stellarAddress: normalizedRecipient },
+            },
+          },
+        },
+      });
+
+      const createdPass = await tx.pass.create({
+        data: {
+          onChainId:
+            BigInt(Date.now()) + BigInt(Math.floor(Math.random() * 1000000)),
+          tierId: tier.id,
+          creatorId: tier.creatorId,
+          fanId: recipient.id,
+          purchasedAt,
+          expiresAt,
+          syncedAt: purchasedAt,
+          metadata: { giftedBy: normalizedSender },
+        },
+        include: {
+          tier: true,
+          creator: true,
+          fan: true,
+        },
+      });
+
+      const amount = Number(tier.priceUsdc);
+      await tx.earningsRecord.create({
+        data: {
+          creatorId: tier.creatorId,
+          fanId: sender.id,
+          tierId: tier.id,
+          amount,
+          fee: 0,
+          netAmount: amount,
+        },
+      });
+
+      return createdPass;
+    });
+
+    this.metricsService?.incActivePasses(tier.creator.stellarAddress);
+    this.metricsService?.incRevenue(
+      tier.creator.stellarAddress,
+      Number(tier.priceUsdc),
+    );
+
+    this.webhooksService
+      .deliverPassPurchaseWebhook(tier.creatorId, pass)
+      .catch((error) =>
+        this.logger.error(`Error triggering gift webhook: ${error.message}`),
+      );
+
+    if (tier.creator.email) {
+      this.emailService
+        .sendPassPurchaseEmail(
+          tier.creator.email,
+          normalizedRecipient,
+          tier.name,
+          tier.priceUsdc.toString(),
+        )
+        .catch((error) =>
+          this.logger.error(
+            `Error triggering creator gift email: ${error.message}`,
+          ),
+        );
+    }
+
+    if (pass.fan.email) {
+      this.emailService
+        .sendPassGiftEmail(
+          pass.fan.email,
+          tier.name,
+          normalizedSender,
+        )
+        .catch((error) =>
+          this.logger.error(
+            `Error triggering recipient gift email: ${error.message}`,
+          ),
+        );
+    }
+
+    return {
+      ...pass,
+      onChainId: pass.onChainId.toString(),
+    };
+  }
+
+  /**
    * Purchase multiple passes in a single atomic transaction
    *
    * @param tierIds Array of tier IDs to purchase passes for (max 5).

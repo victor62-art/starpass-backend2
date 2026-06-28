@@ -53,6 +53,7 @@ describe('PassesService', () => {
   const mockEmailService = {
     sendPassPurchaseEmail: jest.fn().mockResolvedValue(undefined),
     sendBundlePurchaseEmail: jest.fn().mockResolvedValue(undefined),
+    sendPassGiftEmail: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockAdminConfigService = {
@@ -589,6 +590,144 @@ describe('PassesService', () => {
           creatorId: { in: ['creator-1', 'creator-2'] },
         },
       });
+    });
+  });
+
+  describe('giftPass', () => {
+    const senderAddress =
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const recipientAddress =
+      'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    const tierId = '550e8400-e29b-41d4-a716-446655440000';
+    const tier = {
+      id: tierId,
+      creatorId: 'creator-uuid',
+      name: 'Gold',
+      priceUsdc: { toString: () => '25.00', valueOf: () => 25 },
+      durationDays: 30,
+      active: true,
+      creator: {
+        id: 'creator-uuid',
+        stellarAddress:
+          'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC',
+        email: 'creator@example.com',
+      },
+    };
+
+    function mockGiftTransaction(recipientEmail: string | null = null) {
+      const sender = { id: 'sender-fan', stellarAddress: senderAddress };
+      const recipient = {
+        id: 'recipient-fan',
+        stellarAddress: recipientAddress,
+        email: recipientEmail,
+      };
+      const createdPass = {
+        id: 'gift-pass',
+        onChainId: BigInt(42),
+        tierId,
+        creatorId: tier.creatorId,
+        fanId: recipient.id,
+        metadata: { giftedBy: senderAddress },
+        tier,
+        creator: tier.creator,
+        fan: recipient,
+      };
+      const tx = {
+        fan: {
+          upsert: jest
+            .fn()
+            .mockResolvedValueOnce(sender)
+            .mockResolvedValueOnce(recipient),
+        },
+        pass: { create: jest.fn().mockResolvedValue(createdPass) },
+        earningsRecord: { create: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(tx),
+      );
+      return { tx, createdPass };
+    }
+
+    beforeEach(() => {
+      mockPrismaService.tier.findFirst.mockResolvedValue(tier);
+      mockPrismaService.block.findFirst.mockResolvedValue(null);
+    });
+
+    it('should charge the sender and create the pass for the recipient with giftedBy metadata', async () => {
+      const { tx, createdPass } = mockGiftTransaction();
+
+      const result = await service.giftPass(
+        tierId,
+        senderAddress,
+        recipientAddress,
+      );
+
+      expect(tx.pass.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tierId,
+          creatorId: tier.creatorId,
+          fanId: 'recipient-fan',
+          metadata: { giftedBy: senderAddress },
+        }),
+        include: { tier: true, creator: true, fan: true },
+      });
+      expect(tx.earningsRecord.create).toHaveBeenCalledWith({
+        data: {
+          creatorId: tier.creatorId,
+          fanId: 'sender-fan',
+          tierId,
+          amount: 25,
+          fee: 0,
+          netAmount: 25,
+        },
+      });
+      expect(result).toEqual({
+        ...createdPass,
+        onChainId: '42',
+      });
+    });
+
+    it('should reject self-gifting before looking up a tier', async () => {
+      await expect(
+        service.giftPass(tierId, senderAddress, senderAddress.toLowerCase()),
+      ).rejects.toThrow('You cannot gift a pass to yourself');
+
+      expect(mockPrismaService.tier.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should reject an invalid or inactive tier without charging the sender', async () => {
+      mockPrismaService.tier.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.giftPass(tierId, senderAddress, recipientAddress),
+      ).rejects.toThrow('Invalid or inactive tier');
+
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should notify a recipient profile that has an email', async () => {
+      mockGiftTransaction('recipient@example.com');
+
+      await service.giftPass(tierId, senderAddress, recipientAddress);
+
+      expect(mockEmailService.sendPassGiftEmail).toHaveBeenCalledWith(
+        'recipient@example.com',
+        'Gold',
+        senderAddress,
+      );
+    });
+
+    it('should succeed when the recipient profile has no email', async () => {
+      const { createdPass } = mockGiftTransaction();
+
+      await expect(
+        service.giftPass(tierId, senderAddress, recipientAddress),
+      ).resolves.toEqual({
+        ...createdPass,
+        onChainId: '42',
+      });
+      expect(mockEmailService.sendPassGiftEmail).not.toHaveBeenCalled();
     });
   });
 });

@@ -3,6 +3,7 @@ import { PassesController } from './passes.controller';
 import { PassesService } from './passes.service';
 import { ListPassesDto } from './dto/list-passes.dto';
 import { PurchaseBundleDto } from './dto/purchase-bundle.dto';
+import { GiftPassDto } from './dto/gift-pass.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 describe('PassesController', () => {
@@ -23,6 +24,7 @@ describe('PassesController', () => {
     getReceipt: jest.fn(),
     getMetadata: jest.fn(),
     purchaseBundle: jest.fn(),
+    giftPass: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -155,6 +157,32 @@ describe('PassesController', () => {
 
       expect(service.purchaseBundle).toHaveBeenCalledWith([1, 2, 3, 4, 5], 'GB_FAN');
       expect(result).toHaveLength(5);
+    });
+  });
+
+  describe('giftPass', () => {
+    it('should identify the authenticated wallet as the sender', async () => {
+      const dto: GiftPassDto = {
+        tierId: '550e8400-e29b-41d4-a716-446655440000',
+        recipientAddress:
+          'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      };
+      const gift = { id: 'gift-pass', fanId: 'recipient-fan' };
+      mockPassesService.giftPass.mockResolvedValue(gift);
+
+      const result = await controller.giftPass(dto, {
+        user: {
+          address:
+            'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        },
+      });
+
+      expect(service.giftPass).toHaveBeenCalledWith(
+        dto.tierId,
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        dto.recipientAddress,
+      );
+      expect(result).toEqual(gift);
     });
   });
 });
