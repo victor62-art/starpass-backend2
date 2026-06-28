@@ -2,6 +2,7 @@ import { Controller, Get, ServiceUnavailableException, VERSION_NEUTRAL } from '@
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../common/prisma.service';
 import { StellarService } from '../stellar/stellar.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 @ApiTags('health')
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
@@ -9,6 +10,7 @@ export class HealthController {
   constructor(
     private prisma: PrismaService,
     private stellarService: StellarService,
+    private metrics: MetricsService,
   ) {}
 
   @Get()
@@ -38,10 +40,27 @@ export class HealthController {
   async getDeepHealth() {
     let databaseStatus = 'up';
     let stellarStatus = 'up';
+    let dbLatencyMs = 0;
+    let slowQueryCount = 0;
+    let poolMetrics = { activeConnections: 0, maxConnections: 0, utilizationPercent: 0 };
     let hasError = false;
 
     try {
+      const latencyStart = Date.now();
       await this.prisma.$queryRaw`SELECT 1`;
+      dbLatencyMs = Date.now() - latencyStart;
+      
+      slowQueryCount = this.prisma.getSlowQueryCount();
+      poolMetrics = this.prisma.getConnectionPoolMetrics();
+      
+      // Update metrics
+      this.metrics.setDbQueryLatency(dbLatencyMs);
+      this.metrics.setDbConnectionPoolUtilization(poolMetrics.utilizationPercent);
+      
+      // Alert on high pool utilization
+      if (poolMetrics.utilizationPercent > 80) {
+        console.warn(`High database connection pool utilization: ${poolMetrics.utilizationPercent.toFixed(2)}%`);
+      }
     } catch (error) {
       databaseStatus = 'down';
       hasError = true;
@@ -57,7 +76,12 @@ export class HealthController {
     const response = {
       status: hasError ? 'error' : 'ok',
       dependencies: {
-        database: databaseStatus,
+        database: {
+          status: databaseStatus,
+          latencyMs: dbLatencyMs,
+          slowQueries: slowQueryCount,
+          connectionPool: poolMetrics,
+        },
         stellar: stellarStatus,
       },
     };
