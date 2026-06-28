@@ -19,6 +19,7 @@ class TestAuthController {
   @Post("login")
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
+    void dto;
     return { success: true };
   }
 }
@@ -28,6 +29,7 @@ class TestCreatorsController {
   @Post("block")
   @HttpCode(200)
   block(@Body() dto: BlockFanDto) {
+    void dto;
     return { success: true };
   }
 }
@@ -37,6 +39,7 @@ class TestTiersController {
   @Post("bulk")
   @HttpCode(200)
   bulk(@Body() dto: BulkCreateTiersDto) {
+    void dto;
     return { success: true };
   }
 }

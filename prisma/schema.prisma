@@ -108,6 +108,7 @@ model Fan {
   id                  String    @id @default(uuid())
   userId              String    @unique @map("user_id")
   stellarAddress      String    @unique @map("stellar_address")
+  email               String?   @unique
   displayName         String?   @map("display_name")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -130,6 +131,7 @@ model Tier {
   description  String?
   priceUsdc    Decimal       @map("price_usdc")
   durationDays Int           @map("duration_days")
+  trialDays    Int           @default(0) @map("trial_days")
   maxSupply    Int           @default(0) @map("max_supply")
   minted       Int           @default(0)
   active       Boolean       @default(true)
@@ -172,23 +174,22 @@ model WaitlistEntry {
 }
 
 model Pass {
-  id          String          @id @default(uuid())
-  onChainId   BigInt          @unique @map("on_chain_id")
-  tierId      String          @map("tier_id")
-  creatorId   String          @map("creator_id")
-  fanId       String          @map("fan_id")
-  purchasedAt DateTime        @map("purchased_at")
-  expiresAt   DateTime        @map("expires_at")
-  txHash      String?         @map("tx_hash")
-  active      Boolean         @default(true)
-  autoRenew   Boolean         @default(false) @map("auto_renew")
-  syncedAt    DateTime        @map("synced_at")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  tier        Tier            @relation(fields: [tierId], references: [id])
-  creator     Creator         @relation(fields: [creatorId], references: [id])
-  fan         Fan             @relation(fields: [fanId], references: [id])
-  renewalAttempts RenewalAttempt[]
-  supersededBy String? @map("superseded_by")
+  id          String   @id @default(uuid())
+  onChainId   BigInt   @unique @map("on_chain_id")
+  tierId      String   @map("tier_id")
+  creatorId   String   @map("creator_id")
+  fanId       String   @map("fan_id")
+  purchasedAt DateTime @map("purchased_at")
+  expiresAt   DateTime @map("expires_at")
+  txHash      String?  @map("tx_hash")
+  metadata    Json?
+  active      Boolean  @default(true)
+  trialUsed   Boolean  @default(false) @map("trial_used")
+  syncedAt    DateTime @map("synced_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  tier        Tier     @relation(fields: [tierId], references: [id])
+  creator     Creator  @relation(fields: [creatorId], references: [id])
+  fan         Fan      @relation(fields: [fanId], references: [id])
   @@map("passes")
 }
 
@@ -291,17 +292,4 @@ model Notification {
   fan       Fan      @relation(fields: [fanId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
-}
-
-model ApiKey {
-  id          String   @id @default(uuid())
-  name        String
-  key         String   @unique
-  creatorId   String   @map("creator_id")
-  permissions String[]
-  lastUsed    DateTime? @map("last_used")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  @@map("api_keys")
 }

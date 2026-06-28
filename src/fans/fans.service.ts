@@ -32,25 +32,61 @@ export class FansService {
   }
 
   /**
-   * Get all active subscriptions (passes) for a fan.
+   * Get all active subscriptions (passes) for a fan, grouped by creator.
    * 
    * @param stellarAddress The Stellar public key of the fan.
-   * @returns A list of active passes with their associated creator and tier details.
+   * @param page Page number for pagination.
+   * @param limit Items per page for pagination.
+   * @returns Object containing data (grouped by creator), pagination info.
    * @throws {NotFoundException} If the fan is not found.
    */
-  async getSubscriptions(stellarAddress: string) {
+  async getSubscriptions(stellarAddress: string, page = 1, limit = 20) {
     const fan = await this.prisma.fan.findUnique({
       where: { stellarAddress },
     });
 
     if (!fan) throw new NotFoundException('Fan not found');
 
+    if (limit > 50) limit = 50;
+    const skip = (page - 1) * limit;
     const now = new Date();
-    return this.prisma.pass.findMany({
-      where: { fanId: fan.id, active: true, expiresAt: { gt: now } },
-      include: { creator: true, tier: true },
-      orderBy: { expiresAt: 'asc' },
-    });
+
+    // Get all passes (we'll add expired flag)
+    const [passes, total] = await Promise.all([
+      this.prisma.pass.findMany({
+        where: { fanId: fan.id },
+        include: { creator: true, tier: true },
+        orderBy: { expiresAt: 'asc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.pass.count({ where: { fanId: fan.id } }),
+    ]);
+
+    // Group passes by creator
+    const creatorMap = new Map();
+    for (const pass of passes) {
+      const creatorId = pass.creatorId;
+      if (!creatorMap.has(creatorId)) {
+        creatorMap.set(creatorId, {
+          creator: pass.creator,
+          passes: [],
+        });
+      }
+      // Add expired flag to pass
+      const passWithExpired = {
+        ...pass,
+        expired: !pass.active || pass.expiresAt <= now,
+      };
+      creatorMap.get(creatorId).passes.push(passWithExpired);
+    }
+
+    return {
+      data: Array.from(creatorMap.values()),
+      total,
+      page,
+      limit,
+    };
   }
 
   /**
@@ -113,14 +149,6 @@ export class FansService {
   }
 
   /**
-   * Anonymize a fan's personal data (called after deletion request).
-   * This is typically called immediately after requestDeletion() in a scheduled job.
-   * 
-   * @param stellarAddress The Stellar public key of the fan.
-   * @throws {NotFoundException} If the fan is not found.
-   * @throws {BadRequestException} If deletion has not been requested.
-   */
-  /**
    * Request a data export for a fan (GDPR compliance).
    * Compiles all fan data: profile, passes, activity, favorites.
    * Rate limited to 1 export per 24 hours.
@@ -128,7 +156,7 @@ export class FansService {
    * @param stellarAddress The Stellar public key of the fan.
    * @returns The compiled fan data export.
    * @throws {NotFoundException} If the fan is not found.
-   * @throws {TooManyRequestsException} If export was requested within the last 24 hours.
+   * @throws {HttpException} If export was requested within the last 24 hours.
    */
   async requestDataExport(stellarAddress: string) {
     const fan = await this.prisma.fan.findUnique({
@@ -196,8 +224,9 @@ export class FansService {
   /**
    * Anonymize a fan's personal data (called after deletion request).
    * This is typically called immediately after requestDeletion() in a scheduled job.
-   * 
+   *
    * @param stellarAddress The Stellar public key of the fan.
+   * @returns The anonymized fan record.
    * @throws {NotFoundException} If the fan is not found.
    * @throws {BadRequestException} If deletion has not been requested.
    */

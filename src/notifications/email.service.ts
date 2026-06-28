@@ -122,4 +122,52 @@ export class EmailService {
       this.logger.error(`Failed to send email to ${creatorEmail}: ${error instanceof Error ? error.message : 'Unknown error'}`, error instanceof Error ? error.stack : undefined);
     }
   }
+
+  async sendPassGiftEmail(
+    recipientEmail: string,
+    tierName: string,
+    senderDisplay: string,
+  ): Promise<void> {
+    try {
+      const fromEmail = this.configService.get<string>(
+        'FROM_EMAIL',
+        'noreply@starpass.com',
+      );
+      const safeTierName = this.escapeHtml(tierName);
+      const safeSenderDisplay = this.escapeHtml(senderDisplay);
+
+      await this.transporter.sendMail({
+        from: fromEmail,
+        to: recipientEmail,
+        subject: 'You received a StarPass gift',
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>You received a StarPass!</h2>
+            <p>${safeSenderDisplay} gifted you a pass.</p>
+            <p><strong>Tier:</strong> ${safeTierName}</p>
+            <p>Log in to your dashboard to view your new pass.</p>
+          </div>
+        `,
+      });
+
+      this.logger.log('Gift email notification sent.');
+    } catch (error) {
+      this.logger.error(
+        `Failed to send gift email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (character) => {
+      const entities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+      };
+      return entities[character];
+    });
+  }
 }

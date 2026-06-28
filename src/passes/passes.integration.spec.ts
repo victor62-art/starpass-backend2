@@ -94,6 +94,14 @@ describe('Passes GET /passes Integration', () => {
       }
       throw new Error('Pass not found');
     }),
+    giftPass: jest.fn().mockResolvedValue({
+      id: 'gift-pass',
+      fanId: 'recipient-fan',
+      metadata: {
+        giftedBy:
+          'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      },
+    }),
   };
 
   beforeAll(async () => {
@@ -105,7 +113,15 @@ describe('Passes GET /passes Integration', () => {
       .overrideProvider(PrismaService)
       .useValue({})
       .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
+      .useValue({
+        canActivate: (context) => {
+          context.switchToHttp().getRequest().user = {
+            address:
+              'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          };
+          return true;
+        },
+      })
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -290,5 +306,42 @@ describe('Passes GET /passes Integration', () => {
       ]),
     });
     expect(mockPassesService.getMetadata).toHaveBeenCalledWith('pass-1');
+  });
+
+  it('should accept a valid authenticated gift request', async () => {
+    const tierId = '550e8400-e29b-41d4-a716-446655440000';
+    const recipientAddress =
+      'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+
+    const res = await request(app.getHttpServer())
+      .post('/passes/gift')
+      .send({ tierId, recipientAddress })
+      .expect(201);
+
+    expect(res.body).toMatchObject({
+      id: 'gift-pass',
+      fanId: 'recipient-fan',
+      metadata: {
+        giftedBy:
+          'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      },
+    });
+    expect(mockPassesService.giftPass).toHaveBeenCalledWith(
+      tierId,
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      recipientAddress,
+    );
+  });
+
+  it('should reject an invalid gift recipient address', async () => {
+    await request(app.getHttpServer())
+      .post('/passes/gift')
+      .send({
+        tierId: '550e8400-e29b-41d4-a716-446655440000',
+        recipientAddress: 'not-a-stellar-address',
+      })
+      .expect(400);
+
+    expect(mockPassesService.giftPass).not.toHaveBeenCalled();
   });
 });
