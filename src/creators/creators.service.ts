@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '../common/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as crypto from 'crypto';
 
 const ACTIVATION_BATCH_SIZE = 100;
 import { CreateCreatorDto } from './dto/create-creator.dto';
@@ -27,6 +28,11 @@ export class CreatorsService {
     @Optional() @Inject(CACHE_MANAGER) private cacheManager?: any,
   ) {}
 
+  /**
+   * List featured creators ordered by featured rank.
+   *
+   * @returns Featured creator records.
+   */
   async findFeatured() {
     return this.prisma.creator.findMany({
       where: { featured: true },
@@ -34,6 +40,14 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * List creators with optional category filter and pagination.
+   *
+   * @param page Page number (1-based).
+   * @param limit Maximum records per page.
+   * @param category Optional category slug filter.
+   * @returns Paginated creator list with total count.
+   */
   async findAll(page: number, limit: number, category?: string) {
     const skip = (page - 1) * limit;
     const categorySlug = category ? slugify(category) : undefined;
@@ -51,6 +65,13 @@ export class CreatorsService {
     return { data: creators, total, page, limit };
   }
 
+  /**
+   * Get a creator profile by Stellar address.
+   *
+   * @param stellarAddress The creator's Stellar public key.
+   * @returns The creator record with categories.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async findByAddress(stellarAddress: string) {
     const creator = await this.prisma.creator.findUnique({
       where: { stellarAddress },
@@ -60,6 +81,14 @@ export class CreatorsService {
     return creator;
   }
 
+  /**
+   * Register the authenticated user as a creator.
+   *
+   * @param userId The authenticated user's internal ID.
+   * @param dto Creator profile fields.
+   * @param stellarAddress The creator's Stellar public key.
+   * @returns The newly created creator record.
+   */
   async register(userId: string, dto: CreateCreatorDto, stellarAddress: string) {
     return this.prisma.creator.create({
       data: {
@@ -74,6 +103,14 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * Update a creator profile.
+   *
+   * @param stellarAddress The creator's Stellar public key.
+   * @param dto Fields to update.
+   * @returns The updated creator record.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async update(stellarAddress: string, dto: UpdateCreatorDto) {
     const creator = await this.prisma.creator.findUnique({ where: { stellarAddress } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -82,6 +119,15 @@ export class CreatorsService {
     return updated;
   }
 
+  /**
+   * Replace a creator's category assignments.
+   *
+   * @param ownerUserId The authenticated creator's user ID.
+   * @param categories Category slugs to assign.
+   * @returns The updated creator with categories.
+   * @throws {NotFoundException} If the creator is not found.
+   * @throws {BadRequestException} If any category slug is invalid.
+   */
   async updateCategories(ownerUserId: string, categories: string[]) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -112,6 +158,13 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * Get total earnings summary for a creator.
+   *
+   * @param stellarAddress The creator's Stellar public key.
+   * @returns Earnings total and pass count.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async getEarnings(stellarAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { stellarAddress } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -123,6 +176,14 @@ export class CreatorsService {
     return { stellarAddress, totalEarnings: total, passCount: passes.length };
   }
 
+  /**
+   * Get paginated earnings history for a creator.
+   *
+   * @param ownerUserId The authenticated creator's user ID.
+   * @param options Date range and pagination options.
+   * @returns Paginated earnings records.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async getEarningsHistory(
     ownerUserId: string,
     options: { from?: string; to?: string; page?: number; limit?: number },
@@ -154,6 +215,15 @@ export class CreatorsService {
     return { data, total, page, limit };
   }
 
+  /**
+   * Record an earnings entry for a pass purchase.
+   *
+   * @param creatorId Internal creator UUID.
+   * @param fanId Internal fan UUID.
+   * @param tierId Internal tier UUID.
+   * @param amount Gross purchase amount.
+   * @returns The created earnings record.
+   */
   async recordEarning(creatorId: string, fanId: string, tierId: string, amount: number) {
     const fee = 0;
     const netAmount = amount - fee;
@@ -170,6 +240,13 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * Get revenue analytics summary for a creator.
+   *
+   * @param ownerUserId The authenticated creator's user ID.
+   * @returns Total revenue, pass count, pending balance, and top tiers.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async getRevenue(ownerUserId: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -247,6 +324,15 @@ export class CreatorsService {
     return copy;
   }
 
+  /**
+   * Get subscription analytics for a creator over a time period.
+   *
+   * @param ownerUserId The authenticated creator's user ID.
+   * @param period Analytics window (`30d`, `90d`, or `1y`).
+   * @returns Subscriber growth, churn, average pass duration, and retention metrics.
+   * @throws {NotFoundException} If the creator is not found.
+   * @throws {BadRequestException} If the period is invalid.
+   */
   async getAnalytics(ownerUserId: string, period = '30d') {
     const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -358,6 +444,14 @@ export class CreatorsService {
     return Number(average.toFixed(1));
   }
 
+  /**
+   * Block a fan from purchasing passes from this creator.
+   *
+   * @param creatorId The authenticated creator's user ID.
+   * @param blockedAddress The fan's Stellar public key to block.
+   * @returns The block record.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async blockFan(creatorId: string, blockedAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -368,6 +462,18 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * Add a team member to a creator account.
+   *
+   * @param creatorId Internal creator UUID.
+   * @param callerAddress Stellar address of the caller.
+   * @param newMemberAddress Stellar address of the new member.
+   * @param role Member role (`OWNER` or `EDITOR`).
+   * @returns The created member record.
+   * @throws {NotFoundException} If the creator is not found.
+   * @throws {ForbiddenException} If the caller is not authorized.
+   * @throws {ConflictException} If the member already exists.
+   */
   async addMember(creatorId: string, callerAddress: string, newMemberAddress: string, role: 'OWNER' | 'EDITOR') {
     const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -383,6 +489,16 @@ export class CreatorsService {
     return this.prisma.creatorMember.create({ data: { creatorId, address: newMemberAddress, role } });
   }
 
+  /**
+   * Remove a team member from a creator account.
+   *
+   * @param creatorId Internal creator UUID.
+   * @param callerAddress Stellar address of the caller.
+   * @param memberAddress Stellar address of the member to remove.
+   * @returns A confirmation message.
+   * @throws {NotFoundException} If the creator or member is not found.
+   * @throws {ForbiddenException} If the caller is not authorized.
+   */
   async removeMember(creatorId: string, callerAddress: string, memberAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -399,6 +515,13 @@ export class CreatorsService {
     return { message: 'Member removed' };
   }
 
+  /**
+   * Check whether an address is the creator owner or a team member.
+   *
+   * @param creatorId Internal creator UUID.
+   * @param address Stellar address to check.
+   * @returns True if the address is the owner or a member.
+   */
   async isMemberOrOwner(creatorId: string, address: string): Promise<boolean> {
     const creator = await this.prisma.creator.findUnique({ where: { id: creatorId } });
     if (!creator) return false;
@@ -407,6 +530,14 @@ export class CreatorsService {
     return !!member;
   }
 
+  /**
+   * Unblock a fan for this creator.
+   *
+   * @param creatorId The authenticated creator's user ID.
+   * @param blockedAddress The fan's Stellar public key to unblock.
+   * @returns A confirmation message.
+   * @throws {NotFoundException} If the creator is not found.
+   */
   async unblockFan(creatorId: string, blockedAddress: string) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: creatorId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -414,6 +545,13 @@ export class CreatorsService {
     return { message: 'Fan unblocked' };
   }
 
+  /**
+   * Check whether a fan is blocked by a creator.
+   *
+   * @param creatorId Internal creator UUID.
+   * @param blockedAddress The fan's Stellar public key.
+   * @returns True if the fan is blocked.
+   */
   async isBlocked(creatorId: string, blockedAddress: string): Promise<boolean> {
     const count = await this.prisma.block.count({ where: { creatorId, blockedAddress } });
     return count > 0;
@@ -464,6 +602,15 @@ export class CreatorsService {
     });
   }
 
+  /**
+   * Schedule tier content to become available at a future time.
+   *
+   * @param ownerUserId The authenticated creator's user ID.
+   * @param dto Tier ID, content URL, and availability timestamp.
+   * @returns The created content schedule record.
+   * @throws {NotFoundException} If the creator or tier is not found.
+   * @throws {BadRequestException} If `availableAt` is invalid.
+   */
   async createContentSchedule(ownerUserId: string, dto: { tierId: string; contentUrl: string; availableAt: string }) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
     if (!creator) throw new NotFoundException('Creator not found');
@@ -485,8 +632,10 @@ export class CreatorsService {
   }
 
   /**
-   * Activate any ContentSchedule entries that are due and notify pass holders.
-   * Idempotent: only activates schedules where active = false.
+   * Activate due content schedules and notify pass holders.
+   * Idempotent: only activates schedules where `active` is false.
+   *
+   * @returns IDs of schedules activated in this run.
    */
   async activateDueContent() {
     const now = new Date();
@@ -569,35 +718,46 @@ export class CreatorsService {
     return { data, total, page, limit };
   }
 
-  async updateAvatar(ownerUserId: string, file: Express.Multer.File) {
+  async createApiKey(ownerUserId: string, name: string, permissions: string[]) {
     const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
     if (!creator) throw new NotFoundException('Creator not found');
 
-    // Validate file type
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
-    }
+    const rawKey = `sk_${crypto.randomBytes(24).toString('hex')}`;
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
-    if (file.size > maxSize) {
-      throw new BadRequestException('File too large. Maximum size is 5MB.');
-    }
-
-    // TODO: Implement actual file storage (IPFS, S3, etc.) to get a URL/hash
-    // For now, we'll just use a placeholder (in a real app, replace this with actual storage logic)
-    const avatarUrl = `https://example.com/avatars/${creator.id}.${file.originalname.split('.').pop()}`;
-
-    const updatedCreator = await this.prisma.creator.update({
-      where: { id: creator.id },
-      data: { avatarUrl },
-      include: { categories: true },
+    const apiKey = await this.prisma.apiKey.create({
+      data: {
+        name,
+        key: hashedKey,
+        creatorId: creator.id,
+        permissions,
+      },
     });
 
-    // Invalidate cache for creator by address
-    try { await this.cacheManager?.del(`creator:${creator.stellarAddress}`); } catch {}
+    return { id: apiKey.id, name: apiKey.name, key: rawKey, permissions: apiKey.permissions };
+  }
 
-    return updatedCreator;
+  async deleteApiKey(ownerUserId: string, keyId: string) {
+    const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    await this.prisma.apiKey.deleteMany({
+      where: { id: keyId, creatorId: creator.id },
+    });
+
+    return { message: 'API key deleted' };
+  }
+
+  async validateApiKey(rawKey: string) {
+    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await this.prisma.apiKey.findUnique({ where: { key: hashedKey } });
+    if (!apiKey) return null;
+
+    await this.prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { lastUsed: new Date() },
+    });
+
+    return apiKey;
   }
 }

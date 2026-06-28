@@ -13,8 +13,6 @@ jest.mock("@stellar/stellar-sdk", () => ({
 
 describe("AuthService - Stellar Signature Verification", () => {
   let service: AuthService;
-  let prisma: jest.Mocked<PrismaService>;
-  let jwtService: jest.Mocked<JwtService>;
 
   const mockPrismaService = {
     user: {
@@ -56,8 +54,6 @@ describe("AuthService - Stellar Signature Verification", () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prisma = module.get(PrismaService);
-    jwtService = module.get(JwtService);
   });
 
   describe("login (signature verification)", () => {

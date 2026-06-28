@@ -250,4 +250,9 @@ export class StellarService {
       throw error;
     }
   }
+
+  async renewPass(passOnChainId: bigint, tierOnChainId: number): Promise<string> {
+    this.logger.log(`Renewing pass ${passOnChainId.toString()} for tier ${tierOnChainId}`);
+    return `dummy_tx_${Date.now()}`;
+  }
 }

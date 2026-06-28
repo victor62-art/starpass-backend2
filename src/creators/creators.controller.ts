@@ -248,24 +248,39 @@ export class CreatorsController {
     return this.creatorsService.getPayouts(id, req.user.sub, query);
   }
 
-  @Post(':id/avatar')
+  @Post(':id/api-keys')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('avatar'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Upload creator avatar' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({ status: 200, description: 'Avatar uploaded successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid file type or size' })
+  @ApiOperation({ summary: 'Create an API key' })
+  @ApiResponse({ status: 201, description: 'API key created' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Not your creator profile' })
-  uploadAvatar(
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  createApiKey(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { name: string; permissions: string[] },
     @Request() req: any,
   ) {
     if (req.user?.sub !== id) {
-      throw new ForbiddenException('You can only upload avatar for your own profile');
+      throw new ForbiddenException('You can only manage API keys for your own profile');
     }
-    return this.creatorsService.updateAvatar(id, file);
+    return this.creatorsService.createApiKey(id, body.name, body.permissions);
+  }
+
+  @Delete(':id/api-keys/:keyId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an API key' })
+  @ApiResponse({ status: 200, description: 'API key deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  deleteApiKey(
+    @Param('id') id: string,
+    @Param('keyId') keyId: string,
+    @Request() req: any,
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException('You can only manage API keys for your own profile');
+    }
+    return this.creatorsService.deleteApiKey(id, keyId);
   }
 }

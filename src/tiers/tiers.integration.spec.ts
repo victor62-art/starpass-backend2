@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { CacheModule } from '@nestjs/cache-manager';
 import * as request from 'supertest';
 import { TiersModule } from './tiers.module';
 import { PrismaService } from '../common/prisma.service';
@@ -50,7 +51,7 @@ describe('Tiers GET /tiers/:id/analytics Integration', () => {
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [TiersModule],
+      imports: [TiersModule, CacheModule.register({ isGlobal: true })],
     })
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)
@@ -138,7 +139,7 @@ describe('Tiers GET /tiers/:id/analytics Integration', () => {
 
   it('should return 403 when the authenticated user is not the tier creator', async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [TiersModule],
+      imports: [TiersModule, CacheModule.register({ isGlobal: true })],
     })
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)
@@ -158,7 +159,7 @@ describe('Tiers GET /tiers/:id/analytics Integration', () => {
 
   it('should return 401 when no auth token is provided', async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [TiersModule],
+      imports: [TiersModule, CacheModule.register({ isGlobal: true })],
     })
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)

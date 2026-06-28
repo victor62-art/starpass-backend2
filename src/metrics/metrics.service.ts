@@ -7,6 +7,9 @@ export class MetricsService implements OnModuleInit {
 
   activePassesTotal: Gauge<string>;
   totalRevenue: Counter<string>;
+  slowQueriesTotal: Counter<string>;
+  dbQueryLatency: Gauge<string>;
+  dbConnectionPoolUtilization: Gauge<string>;
 
   constructor() {
     this.registry = new Registry();
@@ -22,6 +25,24 @@ export class MetricsService implements OnModuleInit {
       name: 'total_revenue',
       help: 'Total revenue in USDC',
       labelNames: ['creator_address'],
+      registers: [this.registry],
+    });
+
+    this.slowQueriesTotal = new Counter({
+      name: 'slow_queries_total',
+      help: 'Total number of slow database queries (> 1000ms)',
+      registers: [this.registry],
+    });
+
+    this.dbQueryLatency = new Gauge({
+      name: 'db_query_latency_ms',
+      help: 'Database query latency in milliseconds',
+      registers: [this.registry],
+    });
+
+    this.dbConnectionPoolUtilization = new Gauge({
+      name: 'db_connection_pool_utilization_percent',
+      help: 'Database connection pool utilization percentage',
       registers: [this.registry],
     });
   }
@@ -48,5 +69,17 @@ export class MetricsService implements OnModuleInit {
 
   incRevenue(creatorAddress: string, amount: number) {
     this.totalRevenue.labels(creatorAddress).inc(amount);
+  }
+
+  incSlowQueries() {
+    this.slowQueriesTotal.inc();
+  }
+
+  setDbQueryLatency(latencyMs: number) {
+    this.dbQueryLatency.set(latencyMs);
+  }
+
+  setDbConnectionPoolUtilization(utilizationPercent: number) {
+    this.dbConnectionPoolUtilization.set(utilizationPercent);
   }
 }
