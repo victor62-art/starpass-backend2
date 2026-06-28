@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, HttpCode, HttpStatus, Query, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { FansService } from './fans.service';
 
