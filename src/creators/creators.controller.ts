@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe, UseInterceptors } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, Request, Delete, BadRequestException, ForbiddenException, ValidationPipe, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorsService } from './creators.service';
 import { CreateContentScheduleDto } from './dto/create-content-schedule.dto';
 import { CreateCreatorDto } from './dto/create-creator.dto';
@@ -245,5 +246,26 @@ export class CreatorsController {
     @Request() req: any,
   ) {
     return this.creatorsService.getPayouts(id, req.user.sub, query);
+  }
+
+  @Post(':id/avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('avatar'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload creator avatar' })
+  @ApiConsumes('multipart/form-data')
+  @ApiResponse({ status: 200, description: 'Avatar uploaded successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Not your creator profile' })
+  uploadAvatar(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: any,
+  ) {
+    if (req.user?.sub !== id) {
+      throw new ForbiddenException('You can only upload avatar for your own profile');
+    }
+    return this.creatorsService.updateAvatar(id, file);
   }
 }

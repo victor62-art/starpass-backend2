@@ -568,4 +568,36 @@ export class CreatorsService {
 
     return { data, total, page, limit };
   }
+
+  async updateAvatar(ownerUserId: string, file: Express.Multer.File) {
+    const creator = await this.prisma.creator.findUnique({ where: { userId: ownerUserId } });
+    if (!creator) throw new NotFoundException('Creator not found');
+
+    // Validate file type
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      throw new BadRequestException('File too large. Maximum size is 5MB.');
+    }
+
+    // TODO: Implement actual file storage (IPFS, S3, etc.) to get a URL/hash
+    // For now, we'll just use a placeholder (in a real app, replace this with actual storage logic)
+    const avatarUrl = `https://example.com/avatars/${creator.id}.${file.originalname.split('.').pop()}`;
+
+    const updatedCreator = await this.prisma.creator.update({
+      where: { id: creator.id },
+      data: { avatarUrl },
+      include: { categories: true },
+    });
+
+    // Invalidate cache for creator by address
+    try { await this.cacheManager?.del(`creator:${creator.stellarAddress}`); } catch {}
+
+    return updatedCreator;
+  }
 }
