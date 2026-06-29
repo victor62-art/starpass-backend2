@@ -1078,4 +1078,127 @@ export class PassesService {
 
     return expiredPasses.length;
   }
+
+  async changeTier(passId: string, newTierId: string, fanAddress: string) {
+    const now = new Date();
+
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { tier: true, fan: true },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    if (pass.fan.stellarAddress !== fanAddress) {
+      throw new ForbiddenException('Only the pass owner can change tiers');
+    }
+
+    if (!pass.active || pass.expiresAt < now) {
+      throw new BadRequestException('Pass is not active or is expired');
+    }
+
+    if (pass.tierId === newTierId) {
+      throw new BadRequestException('New tier must differ from current tier');
+    }
+
+    const newTier = await this.prisma.tier.findUnique({
+      where: { id: newTierId },
+    });
+
+    if (!newTier || !newTier.active) {
+      throw new BadRequestException('New tier not found or inactive');
+    }
+
+    if (newTier.creatorId !== pass.creatorId) {
+      throw new BadRequestException('New tier must belong to the same creator');
+    }
+
+    // Calculate remaining time
+    const totalDurationMs = pass.tier.durationDays * 24 * 60 * 60 * 1000;
+    const elapsedMs = now.getTime() - pass.purchasedAt.getTime();
+    const remainingMs = Math.max(0, totalDurationMs - elapsedMs);
+    const remainingRatio = remainingMs / totalDurationMs;
+
+    // Calculate remaining value
+    const oldPrice = Number(pass.tier.priceUsdc);
+    const newPrice = Number(newTier.priceUsdc);
+    const remainingValue = oldPrice * remainingRatio;
+
+    // Calculate new duration (based on remaining value and new tier price)
+    const newDurationDays = newPrice > 0 
+      ? (remainingValue / newPrice) * newTier.durationDays 
+      : newTier.durationDays;
+
+    // Ensure minimum 1 day
+    const finalDurationDays = Math.max(1, Math.floor(newDurationDays));
+
+    // Determine if upgrade or downgrade
+    const isUpgrade = newPrice > oldPrice;
+    const priceDifference = newPrice - remainingValue;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Mark old pass as superseded and inactive
+      const updatedOldPass = await tx.pass.update({
+        where: { id: passId },
+        data: {
+          active: false,
+          supersededBy: passId, // temporary, will be updated with new pass id
+        },
+      });
+
+      // Create new pass
+      const newPass = await tx.pass.create({
+        data: {
+          onChainId: BigInt(Date.now()) + BigInt(Math.floor(Math.random() * 1000000)),
+          tierId: newTierId,
+          creatorId: pass.creatorId,
+          fanId: pass.fanId,
+          purchasedAt: now,
+          expiresAt: new Date(now.getTime() + finalDurationDays * 24 * 60 * 60 * 1000),
+          txHash: pass.txHash,
+          trialUsed: pass.trialUsed,
+          autoRenew: pass.autoRenew,
+          syncedAt: now,
+        },
+        include: { tier: true, creator: true, fan: true },
+      });
+
+      // Update old pass's supersededBy with new pass id
+      await tx.pass.update({
+        where: { id: passId },
+        data: { supersededBy: newPass.id },
+      });
+
+      return { oldPass: updatedOldPass, newPass, isUpgrade, priceDifference, remainingValue };
+    });
+
+    // Emit events
+    if (result.isUpgrade) {
+      this.webhooksService.deliverPassPurchaseWebhook(result.newPass.creatorId, {
+        event: 'pass.tier_upgraded',
+        oldPass: result.oldPass,
+        newPass: result.newPass,
+        priceDifference: result.priceDifference,
+        remainingValue: result.remainingValue,
+      }).catch(() => {});
+    } else {
+      this.webhooksService.deliverPassPurchaseWebhook(result.newPass.creatorId, {
+        event: 'pass.tier_downgraded',
+        oldPass: result.oldPass,
+        newPass: result.newPass,
+        priceDifference: result.priceDifference,
+        remainingValue: result.remainingValue,
+      }).catch(() => {});
+    }
+
+    this.webhooksService.deliverPassPurchaseWebhook(result.newPass.creatorId, {
+      event: 'pass.superseded',
+      oldPass: result.oldPass,
+      newPass: result.newPass,
+    }).catch(() => {});
+
+    return result.newPass;
+  }
 }
