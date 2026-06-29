@@ -108,4 +108,20 @@ export class PassesController {
       dto.recipientAddress,
     );
   }
+
+  @Post(':id/auto-renew')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Enable or disable auto-renewal for a pass' })
+  @ApiResponse({ status: 200, description: 'Auto-renewal toggled successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Only the pass owner can toggle auto-renewal' })
+  @ApiResponse({ status: 404, description: 'Pass not found' })
+  async toggleAutoRenew(
+    @Param('id') id: string,
+    @Body('enable') enable: boolean,
+    @Request() req: any,
+  ) {
+    return this.passesService.toggleAutoRenew(id, req.user.address, enable);
+  }
 }

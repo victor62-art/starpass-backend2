@@ -6,6 +6,7 @@ import { EmailService } from '../notifications/email.service';
 import { AdminConfigService } from '../admin/admin-config.service';
 import { MetricsService } from '../metrics/metrics.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { StellarService } from '../stellar/stellar.service';
 
 @Injectable()
 export class PassesService {
@@ -17,6 +18,7 @@ export class PassesService {
     private emailService: EmailService,
     private adminConfigService: AdminConfigService,
     private metricsService: MetricsService,
+    private stellarService: StellarService,
     @Optional() private notificationsGateway?: NotificationsGateway,
   ) {}
 
@@ -950,5 +952,130 @@ export class PassesService {
     }
 
     return expiringPasses.length;
+  }
+
+  async toggleAutoRenew(passId: string, fanAddress: string, enable: boolean) {
+    const pass = await this.prisma.pass.findUnique({
+      where: { id: passId },
+      include: { fan: true },
+    });
+
+    if (!pass) {
+      throw new NotFoundException('Pass not found');
+    }
+
+    if (pass.fan.stellarAddress !== fanAddress) {
+      throw new ForbiddenException('Only the pass owner can toggle auto-renew');
+    }
+
+    return this.prisma.pass.update({
+      where: { id: passId },
+      data: { autoRenew: enable },
+    });
+  }
+
+  async processExpiredPassesForAutoRenew() {
+    const now = new Date();
+    const expiredPasses = await this.prisma.pass.findMany({
+      where: {
+        active: true,
+        expiresAt: { lte: now },
+        autoRenew: true,
+        supersededBy: null,
+      },
+      include: { tier: true, fan: true, creator: true },
+    });
+
+    for (const pass of expiredPasses) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // First mark the pass as inactive
+          await tx.pass.update({
+            where: { id: pass.id },
+            data: { active: false },
+          });
+
+          // Create renewal attempt
+          const renewalAttempt = await tx.renewalAttempt.create({
+            data: {
+              passId: pass.id,
+              status: 'PENDING',
+            },
+          });
+
+          // Trigger renewal via Stellar/Soroban
+          const txHash = await this.stellarService.renewPass(pass.onChainId, pass.tier.onChainId);
+
+          // Mint new pass
+          const newPass = await this.mintPass(
+            pass.tier.onChainId,
+            pass.fan.stellarAddress,
+            {
+              tx,
+              txHash,
+            }
+          );
+
+          // Update old pass
+          await tx.pass.update({
+            where: { id: pass.id },
+            data: { supersededBy: newPass.id },
+          });
+
+          // Update renewal attempt
+          await tx.renewalAttempt.update({
+            where: { id: renewalAttempt.id },
+            data: { status: 'SUCCESS', txHash },
+          });
+
+          this.logger.log(`Successfully renewed pass ${pass.id} -> ${newPass.id}`);
+        });
+      } catch (error) {
+        this.logger.error(`Failed to renew pass ${pass.id}: ${error.message}`);
+
+        // Mark renewal attempt as failed
+        await this.prisma.renewalAttempt.create({
+          data: {
+            passId: pass.id,
+            status: 'FAILED',
+            error: error.message,
+          },
+        });
+
+        // Disable auto-renew
+        await this.prisma.pass.update({
+          where: { id: pass.id },
+          data: { autoRenew: false },
+        });
+
+        // Notify fan
+        if (this.notificationsGateway) {
+          this.notificationsGateway.emitPassRenewalFailedEvent(
+            pass.fan.stellarAddress,
+            {
+              passId: pass.id,
+              tierName: pass.tier.name,
+              creatorName: pass.creator.displayName,
+              error: error.message,
+            }
+          ).catch((err) => {
+            this.logger.error(`Error emitting renewal failed event: ${err.message}`);
+          });
+        }
+
+        if (pass.fan.email) {
+          this.emailService.sendPassRenewalFailedEmail(
+            pass.fan.email,
+            pass.tier.name,
+            pass.creator.displayName,
+            error.message
+          ).catch((err) => {
+            this.logger.error(`Error sending renewal failed email: ${err.message}`);
+          });
+        }
+      }
+    }
+
+    return expiredPasses.length;
   }
 }
